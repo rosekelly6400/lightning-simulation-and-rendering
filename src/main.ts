@@ -1,10 +1,11 @@
 import './style.css'
 import { Pane } from 'tweakpane';
-import { initWebGPU, Renderer } from './renderer';
+import { initWebGPU, Renderer, createPane } from './renderer';
+import { initWebAudio } from './sound/sound';
 import { allRenderer } from './renderers/alltogether_renderer'; // TODO: add more renderers as we see git
 import { cloudRenderer } from './renderers/cloud_renderer'; 
 // import { lightningRenderer } from './renderers/lightning_renderer'; 
-// import { soundRenderer } from './renderers/sound_renderer'; 
+import { soundRenderer } from './renderers/sound_renderer'; 
 
 import { Camera } from './stage/camera';
 import { Cloud_Precomputation } from './stage/cloud_precomputation';
@@ -12,6 +13,7 @@ import { Stage } from './stage/stage';
 
 
 await initWebGPU(); // in renderer.ts
+await initWebAudio(); // sound fx, gpu based sound
 
 const camera = new Camera();
 const cloud_precomputation = new Cloud_Precomputation(camera);
@@ -33,9 +35,9 @@ function setRenderer(mode: string) {
         // case renderModes.lightning:
         //     renderer = new LightningRenderer(stage);
         //     break;
-        // case renderModes.sound:
-        //     renderer = new SoundRenderer(stage);
-        //     break;
+        case renderModes.sound:
+            renderer = new soundRenderer(stage);
+            break;
         case renderModes.all:
             renderer = new allRenderer(stage);
     }
@@ -54,10 +56,11 @@ const PARAMS = {
     expanded: false,
     });
 
-pane.addInput(PARAMS, 'mode', {options: renderModes}).on('change', (ev) => setRenderer(ev.value));
+// Tweakpane: easily adding tweak control for parameters.
 
-    pane.addInput(PARAMS, 'level', {min: 0, max: 100});
-    pane.addInput(PARAMS, 'name');
-    pane.addInput(PARAMS, 'active');
+// see alltogether_renderer for what to do to add your own ui controls
+const renderParams = {mode: renderModes.all};
+const selectorPane = createPane('Renderer');
+selectorPane.addInput(renderParams, 'mode', {options: renderModes}).on('change', (ev) => setRenderer(ev.value));
 
-setRenderer(PARAMS.mode);
+setRenderer(renderParams.mode);

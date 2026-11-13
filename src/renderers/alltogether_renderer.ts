@@ -1,15 +1,22 @@
 import * as renderer from '../renderer';
 import * as shaders from '../shaders/shaders';
 import { Stage } from '../stage/stage';
+import {createPane} from '../renderer';
 
 export class allRenderer extends renderer.Renderer {
     sceneUniformsBindGroupLayout: GPUBindGroupLayout;
     sceneUniformsBindGroup: GPUBindGroup;
+    // set your params down here
+    params = { clearBlue: 0.3 };
 
     pipeline: GPURenderPipeline;
 
     constructor(stage: Stage) {
         super(stage);
+
+        // create the ui and add the inputs
+        this.pane = createPane('All Renderer');
+        this.pane.addInput(this.params, 'clearBlue', {min: 0, max: 1});
 
         // 1) create the bind group layout
         this.sceneUniformsBindGroupLayout = renderer.device.createBindGroupLayout({
@@ -78,7 +85,7 @@ export class allRenderer extends renderer.Renderer {
             colorAttachments: [
                 {
                 view: canvasTextureView,
-                clearValue: { r: 0.0, g: 0.0, b: 0.3, a: 1.0 },
+                clearValue: { r: 0.0, g: 0.0, b: this.params.clearBlue, a: 1.0 },
                 loadOp: 'clear',
                 storeOp: 'store',
                 },
