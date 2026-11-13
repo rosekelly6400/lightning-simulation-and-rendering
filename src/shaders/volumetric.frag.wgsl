@@ -210,7 +210,7 @@ fn convertVec3ToCloudTexIndex(pos: vec3f) -> i32 {
 
 fn trilinearInterpolatePosToTexture(pos: vec3f) -> f32 {
   var halfRow = 0.5*f32(cloudTextureSet.rowSize);
-  var factoredPos = pos*8.0;
+  var factoredPos = pos*12.0;
   var flooredPos = vec3(floor(factoredPos.x+halfRow), floor(factoredPos.y+halfRow), floor(factoredPos.z+halfRow));
 
   var corner_000 = convertVec3ToCloudTexIndex(vec3(flooredPos.x, flooredPos.y, flooredPos.z));
@@ -248,7 +248,7 @@ fn isInsideCloud(currPos: vec3f) -> bool {
     let noiseVal = trilinearInterpolatePosToTexture(currPos);
     //let noiseVal = cloudTextureSet.cloudTexture[convertVec3ToCloudTexIndexOriginal(currPos)];
 
-    if (currPos.y > -10.0 && currPos.y < 10.0 ) {
+    if (currPos.y > -7.0 && currPos.y < 7.0 ) {
       if(noiseVal > 0.5) {
         return true;
       }
@@ -305,7 +305,7 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
   var currentlyInsideCloud = false;
 
   // march along each ray untiwl max distance
-  while(distance(currMarchPos, rayOrigin) < 30.0) {
+  while(distance(currMarchPos, rayOrigin) < 20.0) {
     // if within cloud (sphere)
     if (isInsideCloud(currMarchPos)) {
 
