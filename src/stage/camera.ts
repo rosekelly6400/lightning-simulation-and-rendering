@@ -1,9 +1,9 @@
-import { Mat4, mat4, Vec3, vec3 } from "wgpu-matrix";
+import { Mat4, mat4, Vec3, vec3, Vec4, vec4, Vec2, vec2 } from "wgpu-matrix";
 import { toRadians } from "../utils/math_util";
 import { device, canvas, fovYDegrees } from "../renderer";
 
 class CameraUniforms {
-    readonly buffer = new ArrayBuffer(52 * 4); // need to change the 52 if we add more variables
+    readonly buffer = new ArrayBuffer(72*4); // need to change the 72 if we add more variables
     private readonly floatView = new Float32Array(this.buffer);
 
     set viewProjMat(mat: Float32Array) {
@@ -27,6 +27,21 @@ class CameraUniforms {
     }
     set screenY(val: number) {
         this.floatView[51] = val;
+    }
+    set cameraUp(vec: Float32Array) {
+        this.floatView.set(vec, 52);
+    }
+    set cameraRight(vec: Float32Array) {
+        this.floatView.set(vec, 56);
+    }
+    set cameraFront(vec: Float32Array) {
+        this.floatView.set(vec, 60);
+    }
+    set cameraPos(vec: Float32Array) {
+        this.floatView.set(vec, 64);
+    }
+    set pixelSize(vec: Float32Array) {
+        this.floatView.set(vec, 68);
     }
 }
 
@@ -147,6 +162,13 @@ export class Camera {
         const viewMat = mat4.lookAt(this.cameraPos, lookPos, [0, 1, 0]);
         const viewProjMat = mat4.mul(this.projMat, viewMat);
 
+        const yscaled = Math.tan(fovYDegrees * (Math.PI / 180));
+        const xscaled = (yscaled * canvas.width) / canvas.height;
+        const fovx = (Math.atan(xscaled) * 180) / Math.PI;
+        let fov = vec2.create(fovx, fovYDegrees);
+        const pixelLength = vec2.create(2 * xscaled / canvas.width,
+            2 * yscaled / canvas.height);
+
         this.uniforms.viewProjMat = viewProjMat;
         this.uniforms.viewMat = viewMat;
         this.uniforms.invProjMat = mat4.inverse(this.projMat);
@@ -154,6 +176,11 @@ export class Camera {
         this.uniforms.nClip = Camera.nearPlane;
         this.uniforms.screenX = canvas.width;
         this.uniforms.screenY = canvas.height;
+        this.uniforms.cameraUp = this.cameraUp;
+        this.uniforms.cameraRight = this.cameraRight;
+        this.uniforms.cameraFront = this.cameraFront;
+        this.uniforms.cameraPos = this.cameraPos;
+        this.uniforms.pixelSize = pixelLength;
         
         device.queue.writeBuffer(this.uniformsBuffer, 0, this.uniforms.buffer);
     }
