@@ -1,4 +1,5 @@
 import { Camera } from './stage/camera';
+import { Cloud_Precomputation } from './stage/cloud_precomputation';
 import { Stage } from './stage/stage';
 import { assert } from './utils/util';
 import { Pane } from 'tweakpane';
@@ -52,12 +53,14 @@ export async function initWebGPU() {
 
 export abstract class Renderer {
     protected camera: Camera;
+    protected cloud_precomputation: Cloud_Precomputation;
 
     private prevTime: number = 0;
     private frameRequestId: number;
 
     constructor(stage: Stage) {
         this.camera = stage.camera;
+        this.cloud_precomputation = stage.cloud_precomputation;
 
         this.frameRequestId = requestAnimationFrame((t) => this.onFrame(t));
     }
@@ -75,6 +78,7 @@ export abstract class Renderer {
 
         let deltaTime = time - this.prevTime;
         this.camera.onFrame(deltaTime);
+        this.cloud_precomputation.onFrame(deltaTime);
 
         this.draw();
 
