@@ -1,3 +1,4 @@
+
 struct CameraUniforms {
     viewProjMat: mat4x4f,
     viewMat: mat4x4f,
@@ -210,7 +211,7 @@ fn convertVec3ToCloudTexIndex(pos: vec3f) -> i32 {
 
 fn trilinearInterpolatePosToTexture(pos: vec3f) -> f32 {
   var halfRow = 0.5*f32(cloudTextureSet.rowSize);
-  var factoredPos = pos*12.0;
+  var factoredPos = pos*14.0;
   var flooredPos = vec3(floor(factoredPos.x+halfRow), floor(factoredPos.y+halfRow), floor(factoredPos.z+halfRow));
 
   // Prevent Tiling
@@ -254,7 +255,6 @@ fn isInsideCloud(currPos: vec3f) -> f32 {
     let noiseVal = trilinearInterpolatePosToTexture(currPos);
     //let noiseVal = cloudTextureSet.cloudTexture[convertVec3ToCloudTexIndexOriginal(currPos)];
     let maxY = 8.0;
-    let maxXZ = f32(cloudTextureSet.rowSize)/12.0;
     let noiseLimitAugmentY = 0.2 * (abs(currPos.y)/maxY);
     if (currPos.y > -maxY && currPos.y < maxY ) {
       if(noiseVal > 0.5+noiseLimitAugmentY) {
@@ -288,6 +288,10 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
 
   let fragPosUV = vec2(in.fragPos.x, in.fragPos.y);
 
+  // adaptive ray marching variables
+  var outside_cloud_stepFactor = 0.1;
+  var inside_cloud_stepFactor = 0.04;
+
   let rayOrigin = cameraUniforms.cameraPos.xyz;
   let rayRightShift = cameraUniforms.cameraRight * cameraUniforms.pixelSize.x * (in.fragPos.x - cameraUniforms.screenX*0.5);
   let rayUpShift = cameraUniforms.cameraUp * cameraUniforms.pixelSize.y * (in.fragPos.y - cameraUniforms.screenY*0.5);
@@ -297,35 +301,36 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
   let lightPos = vec3(0.0,20.0,0.0);
 
   let sphereCenter = vec3(0.0,0.0,0.0);
-  var stepFactor = 0.03;
-  var currMarchPos = rayOrigin + rayDir*stepFactor;
+  var stepFactor = outside_cloud_stepFactor;
+  var currMarchPos = rayOrigin + rayDir*0.001;
   var finalCloudColor = vec3(0.1,0.35,0.6);
 
   var occlusionFactor = 1.0;  // along primary ray
   var accumulatedDensity = 0.0; //used to early terminate ray at max density
-  var dx = 0.9; // cloud density (uniform across cloud for now)
-  var lg = length(rayDir*stepFactor);  // length of primary ray step
+  var dx = 0.7; // cloud density (uniform across cloud for now)
+  var lg = length(rayDir*inside_cloud_stepFactor);  // length of both primary and shadow ray step
 
   var css = vec3(1.0, 1.0, 1.0); // cloud base color
 
-  // adaptive ray marching
-  var outside_cloud_stepFactor = 0.4;
-  var inside_cloud_stepFactor = 0.03;
-  var currentlyInsideCloud = false;
-
   // march along each ray untiwl max distance
-  while(distance(currMarchPos, rayOrigin) < 20.0) {
-    // if within cloud (sphere)
+  while(distance(currMarchPos, rayOrigin) < 30.0) {
+    
     let primaryRayCloudSample = isInsideCloud(currMarchPos);
-    if (primaryRayCloudSample > 0.0) {
-      
+    // if outside cloud until this point and now inside cloud, switch to smaller step size
+    // COMMENT OUT BELOW AND SET stepFactor TO inside_cloud_stepFactor TO REMOVE VARIABLE STEP SIZE
+    if(primaryRayCloudSample > 0.0 && stepFactor > inside_cloud_stepFactor + 0.001) {
+      currMarchPos -= rayDir*stepFactor;
+      stepFactor = inside_cloud_stepFactor;
+      continue;
+    }
+    else if (primaryRayCloudSample > 0.0) {
       occlusionFactor *= exp(-1.0 * dx *lg);
       // cast shadow ray
       var currMarchPos_ShadowRay = currMarchPos;
       let shadowRayDir = normalize(lightPos - currMarchPos);
       var txss = 0.0; // measure occlusion along shadow ray
       var dv = dot(rayDir, shadowRayDir); // dot between primary and shadow ray vectors
-      for(var j = 0; j < 15; j++) {
+      for(var j = 0; j < 17; j++) {
         let shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
         if (shadowRayCloudSample > 0.0) {
           txss += dx *lg;
@@ -343,33 +348,12 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
       finalCloudColor += occlusionFactor*css*ixss*(1.0-exp(-1.0 * dx *lg))*0.8;
 
       // early ray termination if max density reached
+      // COMMENT OUT BELOW TO REMOVE EARLY RAY TERMINATION
       accumulatedDensity += dx *lg;
       if(accumulatedDensity > 2.5) {
         break;
       }
     }
-
-    // add variable ray march lenght here
-    // check if next step is in cloud, if it is recalculate next step size to be smaller and set that as currMarchPos
-    // var nextStepPos = currMarchPos + rayDir*stepFactor;
-    // if(currentlyInsideCloud) {
-    //   if (!isInsideCloud(nextStepPos)) {
-    //     currentlyInsideCloud = false;
-    //     stepFactor = outside_cloud_stepFactor;
-    //     lg = length(rayDir*stepFactor);
-    //     currMarchPos = nextStepPos;
-    //     continue;
-    //   }
-    // }
-    // else {
-    //   if (isInsideCloud(nextStepPos)) {
-    //     currentlyInsideCloud = true;
-    //     stepFactor = inside_cloud_stepFactor;
-    //     lg = length(rayDir*stepFactor);
-    //     currMarchPos += rayDir*stepFactor;
-    //     continue;
-    //   }
-    // }
 
     currMarchPos += rayDir*stepFactor;
   }
