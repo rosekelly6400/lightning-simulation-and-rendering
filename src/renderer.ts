@@ -78,6 +78,7 @@ export abstract class Renderer {
         this.cloud_precomputation = stage.cloud_precomputation;
 
         this.frameRequestId = requestAnimationFrame((t) => this.onFrame(t));
+        this.cloud_precomputation.onFrame(0.0);
     }
 
     stop(): void {
@@ -96,7 +97,7 @@ export abstract class Renderer {
         // added this for sound me thinks rebecca? 
         this.dt = deltaTime;
         this.camera.onFrame(deltaTime);
-        this.cloud_precomputation.onFrame(deltaTime);
+        
 
         this.draw();
 

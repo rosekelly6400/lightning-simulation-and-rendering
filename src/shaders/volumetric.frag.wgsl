@@ -205,13 +205,19 @@ fn convertVec3ToCloudTexIndexOriginal(pos: vec3f) -> i32 {
 fn convertVec3ToCloudTexIndex(pos: vec3f) -> i32 {
   // var halfRow = 0.5*f32(cloudTextureSet.rowSize);
    var factoredPos = pos*1.0;
-  return i32(floor(factoredPos.x) + floor(factoredPos.y)*f32(cloudTextureSet.rowSize) + (floor(factoredPos.z)*f32(cloudTextureSet.rowSize*cloudTextureSet.rowSize) % f32(cloudTextureSet.rowSize*cloudTextureSet.rowSize*cloudTextureSet.rowSize)));
+  return i32(floor(pos.x) + floor(pos.y)*f32(cloudTextureSet.rowSize) + (floor(pos.z)*f32(cloudTextureSet.rowSize*cloudTextureSet.rowSize) % f32(cloudTextureSet.rowSize*cloudTextureSet.rowSize*cloudTextureSet.rowSize)));
 }
 
 fn trilinearInterpolatePosToTexture(pos: vec3f) -> f32 {
   var halfRow = 0.5*f32(cloudTextureSet.rowSize);
   var factoredPos = pos*12.0;
   var flooredPos = vec3(floor(factoredPos.x+halfRow), floor(factoredPos.y+halfRow), floor(factoredPos.z+halfRow));
+
+  // Prevent Tiling
+  if(flooredPos.x > f32(cloudTextureSet.rowSize) || flooredPos.y > f32(cloudTextureSet.rowSize) || flooredPos.z > f32(cloudTextureSet.rowSize) ||
+  flooredPos.x < 0.0 || flooredPos.y < 0.0 || flooredPos.z < 0.0) {
+    return 0.0;
+  }
 
   var corner_000 = convertVec3ToCloudTexIndex(vec3(flooredPos.x, flooredPos.y, flooredPos.z));
   var corner_100 = convertVec3ToCloudTexIndex(vec3(flooredPos.x+1, flooredPos.y, flooredPos.z));
@@ -243,14 +249,16 @@ fn trilinearInterpolatePosToTexture(pos: vec3f) -> f32 {
   return final_interp;
 }
 
-fn isInsideCloud(currPos: vec3f) -> bool {
+fn isInsideCloud(currPos: vec3f) -> f32 {
     let index = convertVec3ToCloudTexIndex(currPos);
     let noiseVal = trilinearInterpolatePosToTexture(currPos);
     //let noiseVal = cloudTextureSet.cloudTexture[convertVec3ToCloudTexIndexOriginal(currPos)];
-
-    if (currPos.y > -7.0 && currPos.y < 7.0 ) {
-      if(noiseVal > 0.5) {
-        return true;
+    let maxY = 8.0;
+    let maxXZ = f32(cloudTextureSet.rowSize)/12.0;
+    let noiseLimitAugmentY = 0.2 * (abs(currPos.y)/maxY);
+    if (currPos.y > -maxY && currPos.y < maxY ) {
+      if(noiseVal > 0.5+noiseLimitAugmentY) {
+        return noiseVal;
       }
 
       // var worley = WorleyNoise3D(currPos.xyz /1.0, 0.6);
@@ -272,7 +280,7 @@ fn isInsideCloud(currPos: vec3f) -> bool {
       // }
 
     }
-    return false;
+    return 0.0;
 }
 
 @fragment
@@ -289,11 +297,12 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
   let lightPos = vec3(0.0,20.0,0.0);
 
   let sphereCenter = vec3(0.0,0.0,0.0);
-  var stepFactor = 0.06;
+  var stepFactor = 0.03;
   var currMarchPos = rayOrigin + rayDir*stepFactor;
   var finalCloudColor = vec3(0.1,0.35,0.6);
 
   var occlusionFactor = 1.0;  // along primary ray
+  var accumulatedDensity = 0.0; //used to early terminate ray at max density
   var dx = 0.9; // cloud density (uniform across cloud for now)
   var lg = length(rayDir*stepFactor);  // length of primary ray step
 
@@ -307,8 +316,9 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
   // march along each ray untiwl max distance
   while(distance(currMarchPos, rayOrigin) < 20.0) {
     // if within cloud (sphere)
-    if (isInsideCloud(currMarchPos)) {
-
+    let primaryRayCloudSample = isInsideCloud(currMarchPos);
+    if (primaryRayCloudSample > 0.0) {
+      
       occlusionFactor *= exp(-1.0 * dx *lg);
       // cast shadow ray
       var currMarchPos_ShadowRay = currMarchPos;
@@ -316,7 +326,8 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
       var txss = 0.0; // measure occlusion along shadow ray
       var dv = dot(rayDir, shadowRayDir); // dot between primary and shadow ray vectors
       for(var j = 0; j < 15; j++) {
-        if (isInsideCloud(currMarchPos_ShadowRay)) {
+        let shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
+        if (shadowRayCloudSample > 0.0) {
           txss += dx *lg;
         }
         currMarchPos_ShadowRay += shadowRayDir*stepFactor;
@@ -330,6 +341,12 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
 
       // add to total color
       finalCloudColor += occlusionFactor*css*ixss*(1.0-exp(-1.0 * dx *lg))*0.8;
+
+      // early ray termination if max density reached
+      accumulatedDensity += dx *lg;
+      if(accumulatedDensity > 2.5) {
+        break;
+      }
     }
 
     // add variable ray march lenght here
