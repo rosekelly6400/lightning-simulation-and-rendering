@@ -19,7 +19,8 @@ export const constants = {
 
 // replaces ${name} in WGSL with matching value from constants (above)
 function evalShaderRaw(raw: string) {
-    const generator = new Function('constants', 'return `' + raw.replaceAll('${', '${constants.') + '`');   
+    //const generator = new Function('constants', 'return `' + raw.split('${').join('${constants.') + '`');
+    const generator = new Function('constants', 'return `' + raw.replaceAll('${', '${constants.') + '`');
     return generator(constants);
 }
 

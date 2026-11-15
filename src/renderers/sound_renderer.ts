@@ -83,7 +83,8 @@ export class soundRenderer extends renderer.Renderer {
         await resumeAudio();
 
         // read a wav file for now for audio effects
-        const sound = await bufferFromWAV('/media/thundersample.wav'); 
+        //const sound = await bufferFromWAV(new URL('../../media/thundersample.wav', import.meta.url).href);
+        const sound = await bufferFromWAV('/media/thundersample.wav');
         const thundersound = new ThunderSound([sound, sound], this.params.distance, this.params.volume);
        this.thundersoundlist.push(thundersound);
     }

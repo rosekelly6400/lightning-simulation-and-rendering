@@ -93,6 +93,8 @@ export abstract class Renderer {
         }
 
         let deltaTime = time - this.prevTime;
+        // added this for sound me thinks rebecca? 
+        this.dt = deltaTime;
         this.camera.onFrame(deltaTime);
         this.cloud_precomputation.onFrame(deltaTime);
 

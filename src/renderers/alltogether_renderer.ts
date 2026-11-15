@@ -2,8 +2,12 @@ import * as renderer from '../renderer';
 import * as shaders from '../shaders/shaders';
 import { Stage } from '../stage/stage';
 import {createPane} from '../renderer';
+import { LightningGeneration } from '../lightning/lightning_generation';
+import { LightningDrawing } from './lightning_renderer';
 
 export class allRenderer extends renderer.Renderer {
+    lightning: LightningGeneration;
+    lightningDrawing: LightningDrawing;
     sceneUniformsBindGroupLayout: GPUBindGroupLayout;
     sceneUniformsBindGroup: GPUBindGroup;
     // set your params down here
@@ -17,6 +21,13 @@ export class allRenderer extends renderer.Renderer {
         // create the ui and add the inputs
         this.pane = createPane('All Renderer');
         this.pane.addInput(this.params, 'clearBlue', {min: 0, max: 1});
+
+        // moved all my lightning drawing and pipelines setup in lightning renderer so it doesnt get 2 cluttered here
+        this.lightning = stage.lightning;
+        this.lightningDrawing = new LightningDrawing(stage, this.lightning);
+        // ui for lightning
+        const lightningControls = this.pane.addFolder({title: 'Lightning Bolt'});
+        this.lightningDrawing.addControls(lightningControls);
 
         // 1) create the bind group layout
         this.sceneUniformsBindGroupLayout = renderer.device.createBindGroupLayout({
@@ -94,12 +105,17 @@ export class allRenderer extends renderer.Renderer {
 
         // if we want to do a computePass we need to initialize a compute pipeline as well, not shown here
 
+        //added!
+        this.lightning.compute(encoder);
+
         const renderPass  = encoder.beginRenderPass(renderPassDescriptor);
 
         renderPass.setPipeline(this.pipeline); // we have only one render pipelin but there may be more pipelines u wanna put in
         renderPass.setBindGroup(shaders.constants.bindGroup_uniforms, this.sceneUniformsBindGroup); // set ur own bind groups
 
         renderPass.draw(3, 1, 0, 0); // num vertices of the triangle, other data. Will change depending on the data u pass in
+
+        this.lightningDrawing.render(renderPass);
 
         renderPass.end();
 
