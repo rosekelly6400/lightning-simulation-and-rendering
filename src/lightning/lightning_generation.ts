@@ -185,10 +185,15 @@ export class LightningGeneration {
     attractorBuffer: GPUBuffer;
     lightningPipeline: GPUComputePipeline;
     lightningBindGroup: GPUBindGroup;
-
-    // actual ligtning bolt node list
     lightningNodeBuffer: GPUBuffer;
 
+    // we have a cap on the how many nodes can be made for the lightning bolt. just setting that here
+    readonly primaryPointCapacity = maxNodes;
+
+    // REBECCA AND ROSE LOOK: this is where the positions for the main bolts nodes will be
+    // layout is u32 count for the number of nodes that make up the main bolt + 12 bytes padding, then positions for the nodes. 
+    lightningBoltPointBuffer: GPUBuffer;
+    
     // current nodes for the lightning bolt
     lightningStateBuffer: GPUBuffer;
 
@@ -217,6 +222,7 @@ export class LightningGeneration {
                 { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
                 { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
                 { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+                { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
             ],
         });
         const layout = renderer.device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
@@ -241,6 +247,11 @@ export class LightningGeneration {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         this.uploadParameters(defaultLightningParameters);
+
+        this.lightningBoltPointBuffer = renderer.device.createBuffer({
+            label: 'Main Lightning Points and Count', size: 16 + maxNodes * 16,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+        });
         
         this.lightningNodeBuffer = renderer.device.createBuffer({
             label: 'Lightning Nodes',
@@ -291,6 +302,7 @@ export class LightningGeneration {
                   binding: 4,
                   resource: { buffer: this.channelBuffer },
               },
+              { binding: 5, resource: { buffer: this.lightningBoltPointBuffer } },
           ],
         });
 
@@ -353,6 +365,7 @@ export class LightningGeneration {
             }
         }
         this.uploadParameters(params);
+        renderer.device.queue.writeBuffer(this.lightningBoltPointBuffer, 0, new Uint8Array(16 + maxNodes * 16));
         const attractors = generateAttractors([0, 5, 0], [0, -5, 0], 2048, 2.0, params.seed);
         attractors.push({ position: [0, -5, 0], active: true });
         renderer.device.queue.writeBuffer(this.attractorBuffer, 0, packAttractors(attractors));
@@ -376,6 +389,7 @@ export class LightningGeneration {
         this.needsGeneration = false;
         this.attractorBuffer.destroy();
         this.lightningNodeBuffer.destroy();
+        this.lightningBoltPointBuffer.destroy();
         this.lightningStateBuffer.destroy();
         this.parameterBuffer.destroy();
         this.channelBuffer.destroy();

@@ -55,7 +55,6 @@ struct LightningParameters {
 
 override stepsPerDispatch: u32 = 32u;
 
-// These ranges match lightningLayout in lightning_generation.ts.
 const PRIMARY_NODES = 512u;
 const SECONDARY_CHANNELS = 16u;
 const SECONDARY_NODES = 128u;
@@ -79,6 +78,15 @@ var<storage, read_write> state: LightningState;
 var<uniform> params: LightningParameters;
 @group(0) @binding(4)
 var<storage, read_write> channels: array<LightningChannel>;
+
+struct LightningBoltPoints {
+    count: u32,
+    // vec4f alignment places the first point at byte 16.
+    points: array<vec4f>,
+};
+
+@group(0) @binding(5)
+var<storage, read_write> boltPoints: LightningBoltPoints;
 
 fn branchRandom(seed: u32) -> f32 {
     var value = seed + params.seed;
@@ -130,7 +138,6 @@ fn channelInfluenceRadius(channel: LightningChannel) -> f32 {
     if (channel.order == 0u) {
         return params.influenceRadius;
     }
-    // Short branches respond to a local neighborhood instead of their whole cloud.
     return min(params.influenceRadius, channel.start.w * 0.20);
 }
 
@@ -146,7 +153,6 @@ fn channelStepLength(channel: LightningChannel) -> f32 {
     if (channel.order == 0u) {
         return params.stepLength;
     }
-    // Roughly 24 steps per straight branch, unless the global step is smaller.
     return min(params.stepLength, channel.start.w / 24.0);
 }
 
@@ -226,7 +232,6 @@ fn growOneStep(channelIndex: u32) {
         growthDir = forward * cos(angle) + sideways * sin(angle);
     }
 
-    // Avoid taking a step longer than the remaining distance to the endpoint.
     let stepLength = min(channelStepLength(channel), distanceToEndpoint);
     let nPos = tipPos + growthDir * stepLength;
     let nextIndex = channel.nodeStart + channel.nodeCount;
@@ -240,8 +245,6 @@ fn growOneStep(channelIndex: u32) {
     }
 }
 
-// This function prepares one channel independently of when its parent grew.
-// It can later be called from a scheduler that discovers roots incrementally.
 fn prepareBranch(channelIndex: u32, parentChannelIndex: u32, rootIndex: u32) {
     let parent = channels[parentChannelIndex];
     let root = nodes[rootIndex];
@@ -255,13 +258,11 @@ fn prepareBranch(channelIndex: u32, parentChannelIndex: u32, rootIndex: u32) {
     let up = cross(side, forward);
     let seed = rootIndex * 101u + channelIndex * 10007u;
     let distanceFraction = clamp(length(parent.endpoint.xyz - root.position.xyz) / max(parent.start.w, 0.00001), 0.0, 1.0);
-    // Wide inclinations near the start; narrower as the parent approaches its endpoint.
     let maximumInclination = mix(45.0, 85.0, distanceFraction);
     let inclination = radians(mix(30.0, maximumInclination, branchRandom(seed)));
     let azimuth = branchRandom(seed + 1u) * 6.2831853;
     let direction = forward * cos(inclination) + (side * cos(azimuth) + up * sin(azimuth)) * sin(inclination);
 
-    // LOOK: changing the secondary and tertiary branches
     var minimumLength = params.secondaryMinLength;
     var maximumLength = params.secondaryMaxLength;
     if (parent.order == 1u) {
@@ -330,7 +331,6 @@ fn prepareSecondary() {
         }
     }
     state.secondaryCount = min(candidateCount, SECONDARY_CHANNELS);
-    // Keep channel numbering in root order after sampling across the whole primary.
     for (var index = 1u; index < state.secondaryCount; index++) {
         let root = roots[index];
         var slot = index;
@@ -413,6 +413,11 @@ fn summarize() {
         }
     }
     let primary = channels[0];
+    // Export only the valid main-channel positions, in growth order.
+    for (var index = 0u; index < primary.nodeCount; index++) {
+        boltPoints.points[index] = nodes[primary.nodeStart + index].position;
+    }
+    boltPoints.count = primary.nodeCount;
     state.endpointDistance = length(primary.endpoint.xyz - nodes[primary.nodeCount - 1u].position.xyz);
     state.status = 3u;
     if (primary.status == REACHED) {

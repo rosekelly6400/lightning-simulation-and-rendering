@@ -54,13 +54,16 @@ fn boltVertex(
     var output: VertexOutput;
     let child = nodes[childIndex];
 
-    output.color = vec4f(1.0); // Primary: white
+    output.color = vec4f(1.0); 
 
+    /*
+    this was for debugging the secondary and tertiary branches
     if (child.channelIndex >= 1u && child.channelIndex <= 16u) {
         output.color = vec4f(0.0, 1.0, 1.0, 1.0); // Secondary: cyan
     } else if (child.channelIndex >= 17u) {
         output.color = vec4f(1.0, 0.3, 0.8, 1.0); // Tertiary: pink
     }
+    */
 
     if (state.status == 0u || child.valid == 0u || child.parentIndex == childIndex ||
         child.parentIndex >= arrayLength(&nodes) || f32(child.depth) > reveal.x) {
@@ -68,11 +71,8 @@ fn boltVertex(
         return output;
     }
 
-    // Both vertices belong to one child-parent edge, even across channel ranges.
     let nodeIndex = select(child.parentIndex, childIndex, endpointOffset == 1u);
-
     output.position = camera.viewProjMat * vec4f(nodes[nodeIndex].position.xyz, 1.0);
-
     return output;
 }
 
