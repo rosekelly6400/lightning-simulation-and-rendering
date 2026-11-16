@@ -96,7 +96,7 @@ export abstract class Renderer {
         // added this for sound me thinks rebecca? 
         this.dt = deltaTime;
         this.camera.onFrame(deltaTime);
-        this.cloud_precomputation.onFrame(deltaTime);
+        //this.cloud_precomputation.onFrame(deltaTime);
 
         this.draw();
 

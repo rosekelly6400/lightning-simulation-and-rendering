@@ -38,12 +38,14 @@ export class lightningRenderer extends renderer.Renderer {
         };
 
         this.lightning.compute(encoder);
+        this.lightning.updateReveal(this.dt);
 
         const renderPass = encoder.beginRenderPass(renderPassDescriptor);
         this.lightningDrawing.render(renderPass);
         renderPass.end();
 
         renderer.device.queue.submit([encoder.finish()]);
+        this.lightning.afterSubmit();
     }
 }
 
@@ -96,6 +98,11 @@ export class LightningDrawing {
                     visibility: GPUShaderStage.VERTEX,
                     buffer: { type: 'read-only-storage' },
                 },
+                {
+                    binding: 3,
+                    visibility: GPUShaderStage.VERTEX,
+                    buffer: { type: 'uniform' },
+                },
             ],
         });
 
@@ -110,6 +117,10 @@ export class LightningDrawing {
                 {
                     binding: 2,
                     resource: { buffer: this.generation.lightningStateBuffer },
+                },
+                {
+                    binding: 3,
+                    resource: { buffer: this.generation.lightningRevealBuffer },
                 },
             ],
         });
@@ -149,6 +160,9 @@ export class LightningDrawing {
     }
 
     addControls(pane: Pane | FolderApi) {
+        const seedInput = pane.addInput(this.generation.params, 'seed', {
+            label: 'Seed', min: 0, max: 4294967295, step: 1,
+        });
         pane.addInput(this.generation.params, 'influenceRadius', {
             label: 'Influence radius', min: 0.1, max: 3, step: 0.05,
         });
@@ -161,8 +175,69 @@ export class LightningDrawing {
         pane.addInput(this.generation.params, 'directionWeight', {
             label: 'Endpoint weight', min: 0, max: 1, step: 0.01,
         });
+        const params = this.generation.params;
+        const secondary = pane.addFolder({ title: 'Secondary branches', expanded: false });
+        const secondaryMinimum = secondary.addInput(params, 'secondaryMinLengthPercent', {
+            label: 'Min length %', min: 1, max: 100, step: 1,
+        });
+        const secondaryMaximum = secondary.addInput(params, 'secondaryMaxLengthPercent', {
+            label: 'Max length %', min: 1, max: 100, step: 1,
+        });
+        secondary.addInput(params, 'secondaryProbabilityPercent', {
+            label: 'Probability %', min: 0, max: 100, step: 1,
+        });
+        secondaryMinimum.on('change', () => {
+            if (params.secondaryMinLengthPercent > params.secondaryMaxLengthPercent) {
+                params.secondaryMaxLengthPercent = params.secondaryMinLengthPercent;
+                secondaryMaximum.refresh();
+            }
+        });
+        secondaryMaximum.on('change', () => {
+            if (params.secondaryMaxLengthPercent < params.secondaryMinLengthPercent) {
+                params.secondaryMinLengthPercent = params.secondaryMaxLengthPercent;
+                secondaryMinimum.refresh();
+            }
+        });
+
+        const tertiary = pane.addFolder({ title: 'Tertiary branches', expanded: false });
+        const tertiaryMinimum = tertiary.addInput(params, 'tertiaryMinLengthPercent', {
+            label: 'Min length %', min: 1, max: 100, step: 1,
+        });
+        const tertiaryMaximum = tertiary.addInput(params, 'tertiaryMaxLengthPercent', {
+            label: 'Max length %', min: 1, max: 100, step: 1,
+        });
+        tertiary.addInput(params, 'tertiaryProbabilityPercent', {
+            label: 'Probability %', min: 0, max: 100, step: 1,
+        });
+        tertiaryMinimum.on('change', () => {
+            if (params.tertiaryMinLengthPercent > params.tertiaryMaxLengthPercent) {
+                params.tertiaryMaxLengthPercent = params.tertiaryMinLengthPercent;
+                tertiaryMaximum.refresh();
+            }
+        });
+        tertiaryMaximum.on('change', () => {
+            if (params.tertiaryMaxLengthPercent < params.tertiaryMinLengthPercent) {
+                params.tertiaryMinLengthPercent = params.tertiaryMaxLengthPercent;
+                tertiaryMinimum.refresh();
+            }
+        });
         pane.addButton({ title: 'Regenerate Bolt (apply settings)' })
             .on('click', () => this.generation.regenerate(this.generation.params));
+        pane.addButton({ title: 'New random seed + regenerate' }).on('click', () => {
+            this.generation.params.seed = crypto.getRandomValues(new Uint32Array(1))[0];
+            this.generation.regenerate(this.generation.params);
+            seedInput.refresh();
+        });
+        pane.addInput(this.generation.debugReveal, 'duration', {
+            label: 'Debug reveal (s)', min: 0, max: 10, step: 0.1,
+        });
+        pane.addMonitor(this.generation.debugInfo, 'status', { label: 'Generation' });
+        pane.addMonitor(this.generation.debugInfo, 'nodeCount', { label: 'Nodes' });
+        pane.addMonitor(this.generation.debugInfo, 'endpointDistance', { label: 'End distance' });
+        pane.addMonitor(this.generation.debugInfo, 'generationMs', { label: 'Generation ms' });
+        pane.addMonitor(this.generation.debugInfo, 'secondaryCount', { label: 'Secondary' });
+        pane.addMonitor(this.generation.debugInfo, 'tertiaryCount', { label: 'Tertiary' });
+        pane.addMonitor(this.generation.debugInfo, 'failedBranches', { label: 'Failed branches' });
     }
 
     render(renderPass: GPURenderPassEncoder) {
@@ -170,7 +245,6 @@ export class LightningDrawing {
         renderPass.setBindGroup(1, this.lightningDrawBindGroup);
 
         renderPass.setPipeline(this.boltPipeline);
-        const nodeCapacity = this.generation.lightningNodeBuffer.size / 16;
-        renderPass.draw((nodeCapacity - 1) * 2);
+        renderPass.draw(this.generation.nodeCapacity * 2);
     }
 }
