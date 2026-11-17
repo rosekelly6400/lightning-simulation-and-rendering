@@ -22,6 +22,7 @@ struct CloudTextureSet {
 
 @group(${bindGroup_uniforms}) @binding(0) var<uniform> cameraUniforms: CameraUniforms;
 @group(${bindGroup_uniforms}) @binding(1) var<storage, read>  cloudTextureSet: CloudTextureSet;
+@group(${bindGroup_uniforms}) @binding(2) var<storage, read>  lightGridTextureSet: CloudTextureSet;
 
 @group(1) @binding(0) var positionTex: texture_2d<f32>;
 @group(1) @binding(1) var positionTexSampler: sampler;
@@ -200,6 +201,9 @@ fn WorleyNoise3D( uvw : vec3f,  scale : f32) -> f32{
     return minDist;
 }
 
+fn random1(p : f32) -> f32 {
+    return fract(sin(p * 127.1) * 43758.5453);
+}
 
 fn convertVec3ToCloudTexIndexOriginal(pos: vec3f) -> i32 {
   var halfRow = 0.5*f32(cloudTextureSet.rowSize);
@@ -208,8 +212,6 @@ fn convertVec3ToCloudTexIndexOriginal(pos: vec3f) -> i32 {
 }
 
 fn convertVec3ToCloudTexIndex(pos: vec3f) -> i32 {
-  // var halfRow = 0.5*f32(cloudTextureSet.rowSize);
-   var factoredPos = pos*1.0;
   return i32(floor(pos.x) + floor(pos.y)*f32(cloudTextureSet.rowSize) + (floor(pos.z)*f32(cloudTextureSet.rowSize*cloudTextureSet.rowSize) % f32(cloudTextureSet.rowSize*cloudTextureSet.rowSize*cloudTextureSet.rowSize)));
 }
 
@@ -242,6 +244,47 @@ fn trilinearInterpolatePosToTexture(pos: vec3f) -> f32 {
 
   var interp_110 = mix(cloudTextureSet.cloudTexture[corner_010], cloudTextureSet.cloudTexture[corner_110], x_lerp);
   var interp_111 = mix(cloudTextureSet.cloudTexture[corner_011], cloudTextureSet.cloudTexture[corner_111], x_lerp);
+
+  var y_lerp = factoredPos.y- floor(factoredPos.y);
+  var interp_020 = mix(interp_100, interp_110, y_lerp);
+  var interp_022 = mix(interp_101, interp_111, y_lerp);
+
+  var z_lerp = factoredPos.z- floor(factoredPos.z);
+  var final_interp = mix(interp_020, interp_022, z_lerp);
+
+
+  return final_interp;
+}
+
+fn trilinearInterpolatePosToLightTexture(pos: vec3f) -> f32 {
+  var halfRow = 0.5*f32(lightGridTextureSet.rowSize);
+  var factoredPos = pos*14.0;
+  var flooredPos = vec3(floor(factoredPos.x+halfRow), floor(factoredPos.y+halfRow), floor(factoredPos.z+halfRow));
+
+  // Prevent Tiling
+  if(flooredPos.x > f32(lightGridTextureSet.rowSize) || flooredPos.y > f32(lightGridTextureSet.rowSize) || flooredPos.z > f32(lightGridTextureSet.rowSize) ||
+  flooredPos.x < 0.0 || flooredPos.y < 0.0 || flooredPos.z < 0.0) {
+    return 0.0;
+  }
+
+  var corner_000 = convertVec3ToCloudTexIndex(vec3(flooredPos.x, flooredPos.y, flooredPos.z));
+  var corner_100 = convertVec3ToCloudTexIndex(vec3(flooredPos.x+1, flooredPos.y, flooredPos.z));
+
+  var corner_001 = convertVec3ToCloudTexIndex(vec3(flooredPos.x, flooredPos.y, flooredPos.z+1));
+  var corner_101 = convertVec3ToCloudTexIndex(vec3(flooredPos.x+1, flooredPos.y, flooredPos.z+1));
+
+  var corner_010 = convertVec3ToCloudTexIndex(vec3(flooredPos.x, flooredPos.y+1, flooredPos.z));
+  var corner_110 = convertVec3ToCloudTexIndex(vec3(flooredPos.x+1, flooredPos.y+1, flooredPos.z));
+
+  var corner_011 = convertVec3ToCloudTexIndex(vec3(flooredPos.x, flooredPos.y+1, flooredPos.z+1));
+  var corner_111 = convertVec3ToCloudTexIndex(vec3(flooredPos.x+1, flooredPos.y+1, flooredPos.z+1));
+
+  var x_lerp = factoredPos.x- floor(factoredPos.x);
+  var interp_100 = mix(lightGridTextureSet.cloudTexture[corner_000], lightGridTextureSet.cloudTexture[corner_100], x_lerp);
+  var interp_101 = mix(lightGridTextureSet.cloudTexture[corner_001], lightGridTextureSet.cloudTexture[corner_101], x_lerp);
+
+  var interp_110 = mix(lightGridTextureSet.cloudTexture[corner_010], lightGridTextureSet.cloudTexture[corner_110], x_lerp);
+  var interp_111 = mix(lightGridTextureSet.cloudTexture[corner_011], lightGridTextureSet.cloudTexture[corner_111], x_lerp);
 
   var y_lerp = factoredPos.y- floor(factoredPos.y);
   var interp_020 = mix(interp_100, interp_110, y_lerp);
@@ -305,7 +348,7 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
 
   // adaptive ray marching variables
   var outside_cloud_stepFactor = 0.1;
-  var inside_cloud_stepFactor = 0.04;
+  var inside_cloud_stepFactor = 0.02;
 
   let rayOrigin = cameraUniforms.cameraPos.xyz;
   let rayRightShift = cameraUniforms.cameraRight * cameraUniforms.pixelSize.x * (in.fragPos.x - cameraUniforms.screenX*0.5);
@@ -313,19 +356,18 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
 
   // maybe rayRightShift shouldn't be positive ? (currently positive because controls are unintuitive otherwise)
   let rayDir = normalize(cameraUniforms.cameraFront + rayRightShift - rayUpShift).xyz;
-  let lightPos = vec3(0.0,20.0,0.0);
+  let lightPos = vec3(0.0,5.0,0.0);
 
-  let sphereCenter = vec3(0.0,0.0,0.0);
   var stepFactor = outside_cloud_stepFactor;
   var currMarchPos = rayOrigin + rayDir*0.001;
   
 
   var occlusionFactor = 1.0;  // along primary ray
   var accumulatedDensity = 0.0; //used to early terminate ray at max density
-  var dx = 0.9; // cloud density (uniform across cloud for now)
-  var lg = length(rayDir*inside_cloud_stepFactor);  // length of both primary and shadow ray step
+  var dx = 0.4; // cloud density (uniform across cloud for now)
+  var lg = inside_cloud_stepFactor;  // length of both primary and shadow ray step
 
-  var css = vec3(0.4, 0.4, 0.4); // cloud base color
+  var css = vec3(1.0, 1.0, 1.0); // cloud base color
 
   // march along each ray untiwl max distance
   var currDistFromCamera = distance(currMarchPos, rayOrigin);
@@ -346,13 +388,37 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
       let shadowRayDir = normalize(lightPos - currMarchPos);
       var txss = 0.0; // measure occlusion along shadow ray
       var dv = dot(rayDir, shadowRayDir); // dot between primary and shadow ray vectors
-      for(var j = 0; j < 17; j++) {
-        let shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
-        if (shadowRayCloudSample > 0.0) {
-          txss += dx *lg;
-        }
-        currMarchPos_ShadowRay += shadowRayDir*stepFactor;
-      }
+      // This is what will be stored in lighting grid
+      var gridIndex = convertVec3ToCloudTexIndex(currMarchPos);
+      var currPosSSContribution = trilinearInterpolatePosToLightTexture(currMarchPos);
+      
+      // MULTI SCATTERING USING PRECOMPUTED GRID
+      // let n = 3; // number of points to sample for multi scattering
+      // var txms = 0.0001;
+      // for(var k = 0; k < n; k++) {
+      //   // calculate random point to sample
+      //   var randomPoint = currMarchPos + (2.0 * random3(vec3(currMarchPos.x + f32(k), currMarchPos.y + f32(k), currMarchPos.z + f32(k))) - vec3(1.0, 1.0, 1.0));
+      //   var txkss = trilinearInterpolatePosToLightTexture(randomPoint);
+      //   var avg_d = dx;
+      //   if(isInsideCloud(randomPoint) <= 0.0) {
+      //     avg_d = dx*0.5;
+      //   }
+      //   txms += distance(currMarchPos, randomPoint)*dx + txkss;
+      // }
+      // txss = txms;
+
+      //SINGLE SCATTERING NAIVE BELOW
+      // for(var j = 0; j < 17; j++) {
+      //   let shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
+      //   if (shadowRayCloudSample > 0.0) {
+      //     txss += dx *lg;
+      //   }
+      //   currMarchPos_ShadowRay += shadowRayDir*stepFactor;
+      // }
+
+      // SINGLE SCATTERING USING GRID
+      txss = currPosSSContribution;
+      
       var dp = 10.0 / txss;
       var L = 0.0795774 * dp * pow(0.5 + 0.5 * dv, dp); // 1/4pi * dp
       let s = 1.0;
@@ -366,12 +432,10 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
       // early ray termination if max density reached
       // COMMENT OUT BELOW TO REMOVE EARLY RAY TERMINATION
       accumulatedDensity += dx *lg;
-      if(accumulatedDensity > 3.5) {
+      if(accumulatedDensity > 2.5) {
         break;
       }
     }
-
-    //stepFactor += 0.0005;
 
     currMarchPos += rayDir*stepFactor;
     currDistFromCamera = distance(currMarchPos, rayOrigin);

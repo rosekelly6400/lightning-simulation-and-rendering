@@ -94,6 +94,11 @@ export class cloudRenderer extends renderer.Renderer {
                     binding: 1,
                     visibility: GPUShaderStage.FRAGMENT,
                     buffer: { type: "read-only-storage" }
+                },
+                { // lighting texture set
+                    binding: 2,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    buffer: { type: "read-only-storage" }
                 }
             ]
         });
@@ -109,6 +114,10 @@ export class cloudRenderer extends renderer.Renderer {
                 {
                     binding: 1,
                     resource: { buffer: this.cloud_precomputation.cloudTextureStorageBuffer }
+                },
+                {
+                    binding: 2,
+                    resource: { buffer: this.lightGrid_precomputation.lightGridTextureStorageBuffer }
                 }
             ]
         });
