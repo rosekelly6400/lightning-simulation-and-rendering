@@ -22,6 +22,10 @@ struct CloudTextureSet {
 
 @group(${bindGroup_uniforms}) @binding(0) var<uniform> cameraUniforms: CameraUniforms;
 @group(${bindGroup_uniforms}) @binding(1) var<storage, read>  cloudTextureSet: CloudTextureSet;
+
+@group(1) @binding(0) var positionTex: texture_2d<f32>;
+@group(1) @binding(1) var positionTexSampler: sampler;
+
 struct FragInput
 {
     @builtin(position) fragPos: vec4f
@@ -265,8 +269,8 @@ fn isInsideCloud(currPos: vec3f) -> f32 {
       // var perlin = PerlinNoise(currPos.xyz /4.0);
       // var fbmVal = fbm3D(currPos.x, currPos.y, currPos.z);
 
-      // if(fbm3D(currPos.x, currPos.y, currPos.z) > 0.6) {
-      //   return true;
+      // if(fbm3D(currPos.x, currPos.y, currPos.z) > 0.5+noiseLimitAugmentY) {
+      //   return 1.0;
       // }
       // if(PerlinNoise(currPos.xyz /4.0) > 0.3) {
       //   return true;
@@ -286,7 +290,18 @@ fn isInsideCloud(currPos: vec3f) -> f32 {
 @fragment
 fn main(in: FragInput) -> @location(0) vec4<f32> {
 
-  let fragPosUV = vec2(in.fragPos.x, in.fragPos.y);
+  let fragPosUV = vec2(in.fragPos.x/cameraUniforms.screenX, in.fragPos.y/cameraUniforms.screenY);
+
+  var maxRayMarchDistance = 30.0;
+  var finalCloudColor = vec3(0.1,0.3,0.55);
+
+  let lightningPos = textureSample(positionTex, positionTexSampler, fragPosUV);
+  if(lightningPos.a > 0.0) {
+    let lightningDistToCam = distance(lightningPos.xyz, cameraUniforms.cameraPos.xyz);
+    maxRayMarchDistance = min(distance(lightningPos.xyz, cameraUniforms.cameraPos.xyz), maxRayMarchDistance);
+  }
+
+  
 
   // adaptive ray marching variables
   var outside_cloud_stepFactor = 0.1;
@@ -303,17 +318,18 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
   let sphereCenter = vec3(0.0,0.0,0.0);
   var stepFactor = outside_cloud_stepFactor;
   var currMarchPos = rayOrigin + rayDir*0.001;
-  var finalCloudColor = vec3(0.1,0.35,0.6);
+  
 
   var occlusionFactor = 1.0;  // along primary ray
   var accumulatedDensity = 0.0; //used to early terminate ray at max density
-  var dx = 0.7; // cloud density (uniform across cloud for now)
+  var dx = 0.9; // cloud density (uniform across cloud for now)
   var lg = length(rayDir*inside_cloud_stepFactor);  // length of both primary and shadow ray step
 
-  var css = vec3(1.0, 1.0, 1.0); // cloud base color
+  var css = vec3(0.4, 0.4, 0.4); // cloud base color
 
   // march along each ray untiwl max distance
-  while(distance(currMarchPos, rayOrigin) < 30.0) {
+  var currDistFromCamera = distance(currMarchPos, rayOrigin);
+  while(currDistFromCamera < maxRayMarchDistance) {
     
     let primaryRayCloudSample = isInsideCloud(currMarchPos);
     // if outside cloud until this point and now inside cloud, switch to smaller step size
@@ -350,12 +366,20 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
       // early ray termination if max density reached
       // COMMENT OUT BELOW TO REMOVE EARLY RAY TERMINATION
       accumulatedDensity += dx *lg;
-      if(accumulatedDensity > 2.5) {
+      if(accumulatedDensity > 3.5) {
         break;
       }
     }
 
+    //stepFactor += 0.0005;
+
     currMarchPos += rayDir*stepFactor;
+    currDistFromCamera = distance(currMarchPos, rayOrigin);
+  }
+
+  if(lightningPos.a > 0.0) {
+    let lightningOcclusionFactor = (1.0 - (accumulatedDensity/3.5));
+    finalCloudColor += vec3(0.6,0.0,1.0)*lightningOcclusionFactor;
   }
 
   return vec4(finalCloudColor.xyz, 1.0);

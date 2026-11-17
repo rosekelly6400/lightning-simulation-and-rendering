@@ -19,6 +19,7 @@ struct LightningState {
 struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) color: vec4f,
+    @location(1) lightningPos: vec3f, // used for position texture generation
 };
 
 @group(0) @binding(0)
@@ -48,6 +49,8 @@ fn boltVertex(
     let nodeIndex = segmentIndex + endpointOffset;
 
     output.position = camera.viewProjMat * vec4f(nodes[nodeIndex].position.xyz, 1.0);
+
+    output.lightningPos = nodes[nodeIndex].position.xyz;
 
     return output;
 }
