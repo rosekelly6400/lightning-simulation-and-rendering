@@ -20,9 +20,22 @@ struct CloudTextureSet {
     cloudTexture: array<f32>
 }
 
+struct LightTextureSet {
+    numElements: u32,
+    rowSize: u32,
+    cloudTexture: array<f32>
+}
+
+struct LightningBoltPoints {
+    count: u32,
+    // vec4f alignment places the first point at byte 16.
+    points: array<vec4f>,
+};
+
 @group(${bindGroup_uniforms}) @binding(0) var<uniform> cameraUniforms: CameraUniforms;
 @group(${bindGroup_uniforms}) @binding(1) var<storage, read>  cloudTextureSet: CloudTextureSet;
-@group(${bindGroup_uniforms}) @binding(2) var<storage, read>  lightGridTextureSet: CloudTextureSet;
+@group(${bindGroup_uniforms}) @binding(2) var<storage, read>  lightGridTextureSet: LightTextureSet;
+@group(${bindGroup_uniforms}) @binding(3) var<storage, read>  boltPoints: LightningBoltPoints;
 
 @group(1) @binding(0) var positionTex: texture_2d<f32>;
 @group(1) @binding(1) var positionTexSampler: sampler;
@@ -217,7 +230,7 @@ fn convertVec3ToCloudTexIndex(pos: vec3f) -> i32 {
 
 fn trilinearInterpolatePosToTexture(pos: vec3f) -> f32 {
   var halfRow = 0.5*f32(cloudTextureSet.rowSize);
-  var factoredPos = pos*14.0;
+  var factoredPos = pos*12.0;
   var flooredPos = vec3(floor(factoredPos.x+halfRow), floor(factoredPos.y+halfRow), floor(factoredPos.z+halfRow));
 
   // Prevent Tiling
@@ -256,9 +269,9 @@ fn trilinearInterpolatePosToTexture(pos: vec3f) -> f32 {
   return final_interp;
 }
 
-fn trilinearInterpolatePosToLightTexture(pos: vec3f) -> f32 {
+fn trilinearInterpolatePosToLightTexture(pos: vec3f, index: i32) -> f32 {
   var halfRow = 0.5*f32(lightGridTextureSet.rowSize);
-  var factoredPos = pos*14.0;
+  var factoredPos = pos*12.0;
   var flooredPos = vec3(floor(factoredPos.x+halfRow), floor(factoredPos.y+halfRow), floor(factoredPos.z+halfRow));
 
   // Prevent Tiling
@@ -301,10 +314,15 @@ fn isInsideCloud(currPos: vec3f) -> f32 {
     let index = convertVec3ToCloudTexIndex(currPos);
     let noiseVal = trilinearInterpolatePosToTexture(currPos);
     //let noiseVal = cloudTextureSet.cloudTexture[convertVec3ToCloudTexIndexOriginal(currPos)];
-    let maxY = 8.0;
-    let noiseLimitAugmentY = 0.2 * (abs(currPos.y)/maxY);
+    let maxY = 7.0;
+    let maxX = 7.0;
+    let noiseLimitAugmentY = 0.4 * (abs(currPos.y)/maxY)*(abs(currPos.y)/maxY);
+    let noiseLimitAugmentX = 0.3 * (abs(currPos.x)/maxX)*(abs(currPos.x)/maxX);
+    let noiseLimitAugmentZ = 0.3 * (abs(currPos.z)/maxX)*(abs(currPos.z)/maxX);
+    var totalAugment = max(noiseLimitAugmentY, noiseLimitAugmentX);
+    totalAugment = max(totalAugment, noiseLimitAugmentZ);
     if (currPos.y > -maxY && currPos.y < maxY ) {
-      if(noiseVal > 0.5+noiseLimitAugmentY) {
+      if(noiseVal > 0.4+totalAugment) {
         return noiseVal;
       }
 
@@ -336,7 +354,7 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
   let fragPosUV = vec2(in.fragPos.x/cameraUniforms.screenX, in.fragPos.y/cameraUniforms.screenY);
 
   var maxRayMarchDistance = 30.0;
-  var finalCloudColor = vec3(0.1,0.3,0.55);
+  var finalCloudColor = vec3(0.05,0.14,0.23);
 
   let lightningPos = textureSample(positionTex, positionTexSampler, fragPosUV);
   if(lightningPos.a > 0.0) {
@@ -348,7 +366,7 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
 
   // adaptive ray marching variables
   var outside_cloud_stepFactor = 0.1;
-  var inside_cloud_stepFactor = 0.02;
+  var inside_cloud_stepFactor = 0.04;
 
   let rayOrigin = cameraUniforms.cameraPos.xyz;
   let rayRightShift = cameraUniforms.cameraRight * cameraUniforms.pixelSize.x * (in.fragPos.x - cameraUniforms.screenX*0.5);
@@ -356,7 +374,7 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
 
   // maybe rayRightShift shouldn't be positive ? (currently positive because controls are unintuitive otherwise)
   let rayDir = normalize(cameraUniforms.cameraFront + rayRightShift - rayUpShift).xyz;
-  let lightPos = vec3(0.0,5.0,0.0);
+  let lightPos = vec3(0.0,25.0,0.0);
 
   var stepFactor = outside_cloud_stepFactor;
   var currMarchPos = rayOrigin + rayDir*0.001;
@@ -364,10 +382,27 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
 
   var occlusionFactor = 1.0;  // along primary ray
   var accumulatedDensity = 0.0; //used to early terminate ray at max density
-  var dx = 0.4; // cloud density (uniform across cloud for now)
+  var dx = 0.9; // cloud density (uniform across cloud for now)
   var lg = inside_cloud_stepFactor;  // length of both primary and shadow ray step
 
-  var css = vec3(1.0, 1.0, 1.0); // cloud base color
+  var css = vec3(0.6, 0.6, 0.6); // cloud base color
+
+  var lightningPointsArray = array<vec3f, 3>();
+  var lightningPointsArraySize = 3;
+  //lightningPointsArray[0] = boltPoints.points[0].xyz;
+  // lightningPointsArray[1] = vec3(0.0,-5.0,0.0);
+
+  var jumpSize = i32(boltPoints.count) / lightningPointsArraySize;
+  for(var boltIndex = 0; boltIndex < lightningPointsArraySize; boltIndex++) {
+    var currIndex = jumpSize * boltIndex;
+    currIndex = min(currIndex, i32(boltPoints.count-1));
+    lightningPointsArray[boltIndex] = boltPoints.points[currIndex].xyz;
+  }
+  // lightningPointsArray[0] = boltPoints.points[0].xyz;
+  // lightningPointsArray[1] = boltPoints.points[1].xyz;
+  // lightningPointsArray[0] = boltPoints.points[2].xyz;
+  // lightningPointsArray[1] = boltPoints.points[3].xyz;
+  
 
   // march along each ray untiwl max distance
   var currDistFromCamera = distance(currMarchPos, rayOrigin);
@@ -382,15 +417,18 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
       continue;
     }
     else if (primaryRayCloudSample > 0.0) {
+      // TODO: For each light, do this iteration and add to clouds
+
+      // basic lighting for "sun"
       occlusionFactor *= exp(-1.0 * dx *lg);
       // cast shadow ray
       var currMarchPos_ShadowRay = currMarchPos;
-      let shadowRayDir = normalize(lightPos - currMarchPos);
+      var shadowRayDir = normalize(lightPos - currMarchPos);
       var txss = 0.0; // measure occlusion along shadow ray
       var dv = dot(rayDir, shadowRayDir); // dot between primary and shadow ray vectors
       // This is what will be stored in lighting grid
       var gridIndex = convertVec3ToCloudTexIndex(currMarchPos);
-      var currPosSSContribution = trilinearInterpolatePosToLightTexture(currMarchPos);
+      var currPosSSContribution = trilinearInterpolatePosToLightTexture(currMarchPos, 0);
       
       // MULTI SCATTERING USING PRECOMPUTED GRID
       // let n = 3; // number of points to sample for multi scattering
@@ -398,7 +436,7 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
       // for(var k = 0; k < n; k++) {
       //   // calculate random point to sample
       //   var randomPoint = currMarchPos + (2.0 * random3(vec3(currMarchPos.x + f32(k), currMarchPos.y + f32(k), currMarchPos.z + f32(k))) - vec3(1.0, 1.0, 1.0));
-      //   var txkss = trilinearInterpolatePosToLightTexture(randomPoint);
+      //   var txkss = trilinearInterpolatePosToLightTexture(randomPoint, 0);
       //   var avg_d = dx;
       //   if(isInsideCloud(randomPoint) <= 0.0) {
       //     avg_d = dx*0.5;
@@ -408,31 +446,68 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
       // txss = txms;
 
       //SINGLE SCATTERING NAIVE BELOW
-      // for(var j = 0; j < 17; j++) {
-      //   let shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
-      //   if (shadowRayCloudSample > 0.0) {
-      //     txss += dx *lg;
-      //   }
-      //   currMarchPos_ShadowRay += shadowRayDir*stepFactor;
-      // }
+      for(var j = 0; j < 17; j++) {
+        var shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
+        if (shadowRayCloudSample > 0.0) {
+          txss += dx *lg;
+        }
+        currMarchPos_ShadowRay += shadowRayDir*stepFactor;
+      }
 
       // SINGLE SCATTERING USING GRID
-      txss = currPosSSContribution;
+      //txss = currPosSSContribution;
       
       var dp = 10.0 / txss;
       var L = 0.0795774 * dp * pow(0.5 + 0.5 * dv, dp); // 1/4pi * dp
-      let s = 1.0;
+      var s = 1.0;
       var lb = exp(-1.0*txss);
       var ixss = L + lb;
       
 
       // add to total color
-      finalCloudColor += occlusionFactor*css*ixss*(1.0-exp(-1.0 * dx *lg))*0.8;
+      finalCloudColor += occlusionFactor*css*ixss*(1.0-exp(-1.0 * dx *lg))*0.5;
+
+
+      // iterate through lightning point lights and add to cloud
+      // for(var p = 0; p < lightningPointsArraySize; p++) {
+      //   var currLightningNodePos = lightningPointsArray[p];
+      //   currMarchPos_ShadowRay = currMarchPos;
+      //   shadowRayDir = normalize(currLightningNodePos - currMarchPos);
+      //   txss = 0.0; // measure occlusion along shadow ray
+      //   dv = dot(rayDir, shadowRayDir); // dot between primary and shadow ray vectors
+      //   // This is what will be stored in lighting grid
+      //   gridIndex = convertVec3ToCloudTexIndex(currMarchPos);
+      //   currPosSSContribution = trilinearInterpolatePosToLightTexture(currMarchPos, 0);
+        
+
+      //   //SINGLE SCATTERING NAIVE BELOW
+      //   for(var j = 0; j < 17; j++) {
+      //     var shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
+      //     if (shadowRayCloudSample > 0.0) {
+      //       txss += dx *lg;
+      //     }
+      //     currMarchPos_ShadowRay += shadowRayDir*stepFactor;
+      //   }
+
+      //   // SINGLE SCATTERING USING GRID
+      //   //txss = currPosSSContribution;
+        
+      //   dp = 10.0 / txss;
+      //   L = 0.0795774 * dp * pow(0.5 + 0.5 * dv, dp); // 1/4pi * dp
+      //   s = 1.0;
+      //   lb = exp(-1.0*txss);
+      //   ixss = L + lb;
+        
+
+      //   // add to total color
+      //   finalCloudColor += occlusionFactor*css*ixss*(1.0-exp(-1.0 * dx *lg))*0.3;
+      // }
+
 
       // early ray termination if max density reached
       // COMMENT OUT BELOW TO REMOVE EARLY RAY TERMINATION
       accumulatedDensity += dx *lg;
-      if(accumulatedDensity > 2.5) {
+      if(accumulatedDensity > 3.0) {
         break;
       }
     }
@@ -442,8 +517,8 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
   }
 
   if(lightningPos.a > 0.0) {
-    let lightningOcclusionFactor = (1.0 - (accumulatedDensity/3.5));
-    finalCloudColor += vec3(0.6,0.0,1.0)*lightningOcclusionFactor;
+    let lightningOcclusionFactor = (1.0 - (accumulatedDensity/3.0));
+    finalCloudColor += vec3(0.7,0.5,1.0)*lightningOcclusionFactor;
   }
 
   return vec4(finalCloudColor.xyz, 1.0);

@@ -99,6 +99,11 @@ export class cloudRenderer extends renderer.Renderer {
                     binding: 2,
                     visibility: GPUShaderStage.FRAGMENT,
                     buffer: { type: "read-only-storage" }
+                },
+                { // lighting node array
+                    binding: 3,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    buffer: { type: "read-only-storage" }
                 }
             ]
         });
@@ -118,6 +123,10 @@ export class cloudRenderer extends renderer.Renderer {
                 {
                     binding: 2,
                     resource: { buffer: this.lightGrid_precomputation.lightGridTextureStorageBuffer }
+                },
+                {
+                    binding: 3,
+                    resource: { buffer: this.lightning.lightningBoltPointBuffer }
                 }
             ]
         });
@@ -172,6 +181,7 @@ export class cloudRenderer extends renderer.Renderer {
         };
 
         this.lightning.compute(encoderLightning);
+        this.lightning.updateReveal(this.dt);
         const renderPassLightning  = encoderLightning.beginRenderPass(renderPassDescriptorLightning);
         this.lightningDrawing.render(renderPassLightning);
 

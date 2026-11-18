@@ -17,7 +17,6 @@ export class LightGrid_Precomputation {
 
     timeUniformBuffer: GPUBuffer;
 
-    // TODO rename all of these to light grid
     createLightGridTextureComputeBindGroupLayout: GPUBindGroupLayout;
     createLightGridTextureComputeBindGroup: GPUBindGroup;
     createLightGridTextureComputePipeline: GPUComputePipeline;
