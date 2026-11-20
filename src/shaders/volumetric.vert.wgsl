@@ -30,7 +30,7 @@ fn main(
 
   // render triangle covering camera
   var pos = array<vec3<f32>, 3>(
-    (cameraUniforms.cameraPos + cameraUniforms.cameraFront + 2.5 * cameraUniforms.cameraUp).xyz,
+    (cameraUniforms.cameraPos + cameraUniforms.cameraFront + 3.5 * cameraUniforms.cameraUp).xyz,
     (cameraUniforms.cameraPos + cameraUniforms.cameraFront + 1.5 * cameraUniforms.cameraRight - 1.5 * cameraUniforms.cameraUp).xyz,
     (cameraUniforms.cameraPos + cameraUniforms.cameraFront - 1.5 * cameraUniforms.cameraRight - 1.5 * cameraUniforms.cameraUp).xyz
   );
