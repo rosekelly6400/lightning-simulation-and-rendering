@@ -25,6 +25,8 @@ struct LightningState {
     tertiaryCount: u32,
     failedBranches: u32,
     padding: u32,
+    bb_minCorner: vec4f,
+    bb_maxCorner: vec4f,
 };
 
 struct VertexOutput {

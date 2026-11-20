@@ -100,8 +100,18 @@ export class cloudRenderer extends renderer.Renderer {
                     visibility: GPUShaderStage.FRAGMENT,
                     buffer: { type: "read-only-storage" }
                 },
-                { // lighting node array
+                { // lighting node array primary bolt points
                     binding: 3,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    buffer: { type: "read-only-storage" }
+                },
+                { // lighting node array
+                    binding: 4,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    buffer: { type: "read-only-storage" }
+                },
+                { // lighting state
+                    binding: 5,
                     visibility: GPUShaderStage.FRAGMENT,
                     buffer: { type: "read-only-storage" }
                 }
@@ -127,6 +137,14 @@ export class cloudRenderer extends renderer.Renderer {
                 {
                     binding: 3,
                     resource: { buffer: this.lightning.lightningBoltPointBuffer }
+                },
+                {
+                    binding: 4,
+                    resource: { buffer: this.lightning.lightningNodeBuffer }
+                },
+                {
+                    binding: 5,
+                    resource: { buffer: this.lightning.lightningStateBuffer }
                 }
             ]
         });

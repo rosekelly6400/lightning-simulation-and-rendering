@@ -32,10 +32,33 @@ struct LightningBoltPoints {
     points: array<vec4f>,
 };
 
+struct LightningNode {
+    position: vec4f,
+    parentIndex: u32,
+    channelIndex: u32,
+    depth: u32,
+    valid: u32,
+};
+
+struct LightningState {
+    nodeCount: u32,
+    status: u32,
+    endpointDistance: f32,
+    maximumDepth: u32,
+    secondaryCount: u32,
+    tertiaryCount: u32,
+    failedBranches: u32,
+    padding: u32,
+    bb_minCorner: vec4f,
+    bb_maxCorner: vec4f,
+};
+
 @group(${bindGroup_uniforms}) @binding(0) var<uniform> cameraUniforms: CameraUniforms;
 @group(${bindGroup_uniforms}) @binding(1) var<storage, read>  cloudTextureSet: CloudTextureSet;
 @group(${bindGroup_uniforms}) @binding(2) var<storage, read>  lightGridTextureSet: LightTextureSet;
 @group(${bindGroup_uniforms}) @binding(3) var<storage, read>  boltPoints: LightningBoltPoints;
+@group(${bindGroup_uniforms}) @binding(4) var<storage, read> nodes: array<LightningNode>;
+@group(${bindGroup_uniforms}) @binding(5) var<storage, read> state: LightningState;
 
 @group(1) @binding(0) var positionTex: texture_2d<f32>;
 @group(1) @binding(1) var positionTexSampler: sampler;
@@ -348,6 +371,55 @@ fn isInsideCloud(currPos: vec3f) -> f32 {
     return 0.0;
 }
 
+fn triangleIntersectionTest(
+  v0: vec3f, v1: vec3f, v2: vec3f, 
+  rayOrigin : vec3f, rayDirection : vec3f) -> f32
+{   
+
+  var FLT_EPSILON = 0.0000001;
+
+  var baryPosition = vec3f(0.0);
+
+  //var ro = multiplyMV(triangle.inverseTransform, glm::vec4(r.origin, 1.0f));
+  // glm::vec3 rd = glm::normalize(multiplyMV(triangle.inverseTransform, glm::vec4(r.direction, 0.0f)));
+  
+  var ro = rayOrigin;
+  var rd = rayDirection;
+
+  var rt_origin = ro;
+  var rt_direction = rd;
+
+  var e1 = v1 - v0;
+  var e2 = v2 - v0;
+
+  var p = cross(rt_direction, e2);
+
+  var a = dot(e1, p);
+  if(a < FLT_EPSILON) {
+    return -1.0;
+  }
+
+  var f = 1.0f / a;
+
+  var s = rt_origin - v0;
+  baryPosition.x = f * dot(s, p);
+  if(baryPosition.x < 0.0f) { return -1; }
+  if(baryPosition.x > 1.0f) { return -1; }
+
+  var q = cross(s, e1);
+  baryPosition.y = f * dot(rt_direction, q);
+  if(baryPosition.y < 0.0f) {return -1;}
+  if(baryPosition.y + baryPosition.x > 1.0f) {return -1;}
+
+  baryPosition.z = f * dot(e2, q);
+  if (baryPosition.z < 0.0f) {return -1;}
+
+  var intersectionPoint = rayOrigin + baryPosition.z * rayDirection;
+
+  return baryPosition.z;
+}
+
+
 @fragment
 fn main(in: FragInput) -> @location(0) vec4<f32> {
 
@@ -356,16 +428,16 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
   var maxRayMarchDistance = 30.0;
   var finalCloudColor = vec3(0.05,0.14,0.23);
 
-  let lightningPos = textureSample(positionTex, positionTexSampler, fragPosUV);
-  if(lightningPos.a > 0.0) {
-    let lightningDistToCam = distance(lightningPos.xyz, cameraUniforms.cameraPos.xyz);
-    maxRayMarchDistance = min(distance(lightningPos.xyz, cameraUniforms.cameraPos.xyz), maxRayMarchDistance);
-  }
+  // let lightningPos = textureSample(positionTex, positionTexSampler, fragPosUV);
+  // if(lightningPos.a > 0.0) {
+  //   let lightningDistToCam = distance(lightningPos.xyz, cameraUniforms.cameraPos.xyz);
+  //   maxRayMarchDistance = min(distance(lightningPos.xyz, cameraUniforms.cameraPos.xyz), maxRayMarchDistance);
+  // }
 
   
 
   // adaptive ray marching variables
-  var outside_cloud_stepFactor = 0.1;
+  var outside_cloud_stepFactor = 0.5;
   var inside_cloud_stepFactor = 0.04;
 
   let rayOrigin = cameraUniforms.cameraPos.xyz;
@@ -402,7 +474,67 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
   // lightningPointsArray[1] = boltPoints.points[1].xyz;
   // lightningPointsArray[0] = boltPoints.points[2].xyz;
   // lightningPointsArray[1] = boltPoints.points[3].xyz;
-  
+
+  // RAY INTERSECT WITH TRIANGLES
+  var lightningHit = false;
+  var boltWidth = 0.02;
+  // for(var boltIndex = 0; boltIndex < i32(boltPoints.count)-1; boltIndex++) {
+  //   if (all(boltPoints.points[boltIndex].xyz == vec3f(-100.0)) || all(boltPoints.points[boltIndex + 1].xyz == vec3f(-100.0))) {
+  //     continue;
+  //   }
+  //   // need to handle not connecting branch lightning
+  //   var v0 = boltPoints.points[boltIndex].xyz + normalize(rayRightShift.xyz)*boltWidth;
+  //   var v1 = boltPoints.points[boltIndex].xyz - normalize(rayRightShift.xyz)*boltWidth;
+  //   var v2 = boltPoints.points[boltIndex + 1].xyz + normalize(rayRightShift.xyz)*boltWidth;
+  //   var v3 = boltPoints.points[boltIndex + 1].xyz - normalize(rayRightShift.xyz)*boltWidth;
+
+  //   var t1 = triangleIntersectionTest( v0, v1, v2, rayOrigin, rayDir);
+  //   var t2 = triangleIntersectionTest( v2, v1, v3, rayOrigin, rayDir);
+  //   var t3 = triangleIntersectionTest( v2, v1, v0, rayOrigin, rayDir);
+  //   var t4 = triangleIntersectionTest( v3, v1, v2, rayOrigin, rayDir);
+  //   if (t1 > 0.0 || t2 > 0.0 || t3 > 0.0 || t4 > 0.0) {
+  //     var intersect_t = max(t1, t2);
+  //     intersect_t = max(intersect_t, t3);
+  //     intersect_t = max(intersect_t, t4);
+  //     var intersectionPoint = rayOrigin + intersect_t * rayDir;
+  //     maxRayMarchDistance = min(distance(intersectionPoint.xyz, cameraUniforms.cameraPos.xyz), maxRayMarchDistance);
+  //     lightningHit = true;
+  //     //return vec4(1.0, 0.0, 0.0, 1.0);
+  //   }
+  // }
+  for(var boltIndex = 0u; boltIndex < 2*arrayLength(&nodes) - 2; boltIndex++) {
+    let childIndex = boltIndex / 2u;
+    let endpointOffset = boltIndex % 2u;
+    let child = nodes[childIndex];
+    if (child.valid == 0u || child.parentIndex == childIndex ||
+        child.parentIndex >= arrayLength(&nodes)) {
+        continue;
+    }
+
+    let nodeIndex = select(child.parentIndex, childIndex, endpointOffset == 1u);
+    //nodes[nodeIndex].position.xyz
+    if (all(nodes[nodeIndex].position.xyz == vec3f(0.0)) || all(nodes[nodeIndex + 1].position.xyz == vec3f(0.0))) {
+      continue;
+    }
+    var v0 = nodes[nodeIndex].position.xyz + normalize(rayRightShift.xyz)*boltWidth;
+    var v1 = nodes[nodeIndex].position.xyz - normalize(rayRightShift.xyz)*boltWidth;
+    var v2 = nodes[nodeIndex + 1].position.xyz + normalize(rayRightShift.xyz)*boltWidth;
+    var v3 = nodes[nodeIndex + 1].position.xyz - normalize(rayRightShift.xyz)*boltWidth;
+
+    var t1 = triangleIntersectionTest( v0, v1, v2, rayOrigin, rayDir);
+    var t2 = triangleIntersectionTest( v2, v1, v3, rayOrigin, rayDir);
+    var t3 = triangleIntersectionTest( v2, v1, v0, rayOrigin, rayDir);
+    var t4 = triangleIntersectionTest( v3, v1, v2, rayOrigin, rayDir);
+    if (t1 > 0.0 || t2 > 0.0 || t3 > 0.0 || t4 > 0.0) {
+      var intersect_t = max(t1, t2);
+      intersect_t = max(intersect_t, t3);
+      intersect_t = max(intersect_t, t4);
+      var intersectionPoint = rayOrigin + intersect_t * rayDir;
+      maxRayMarchDistance = min(distance(intersectionPoint.xyz, cameraUniforms.cameraPos.xyz), maxRayMarchDistance);
+      lightningHit = true;
+      //return vec4(1.0, 0.0, 0.0, 1.0);
+    }
+  }
 
   // march along each ray untiwl max distance
   var currDistFromCamera = distance(currMarchPos, rayOrigin);
@@ -446,16 +578,16 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
       // txss = txms;
 
       //SINGLE SCATTERING NAIVE BELOW
-      for(var j = 0; j < 17; j++) {
-        var shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
-        if (shadowRayCloudSample > 0.0) {
-          txss += dx *lg;
-        }
-        currMarchPos_ShadowRay += shadowRayDir*stepFactor;
-      }
+      // for(var j = 0; j < 17; j++) {
+      //   var shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
+      //   if (shadowRayCloudSample > 0.0) {
+      //     txss += dx *lg;
+      //   }
+      //   currMarchPos_ShadowRay += shadowRayDir*stepFactor;
+      // }
 
       // SINGLE SCATTERING USING GRID
-      //txss = currPosSSContribution;
+      txss = currPosSSContribution;
       
       var dp = 10.0 / txss;
       var L = 0.0795774 * dp * pow(0.5 + 0.5 * dv, dp); // 1/4pi * dp
@@ -516,7 +648,12 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
     currDistFromCamera = distance(currMarchPos, rayOrigin);
   }
 
-  if(lightningPos.a > 0.0) {
+  // if(lightningPos.a > 0.0) {
+  //   let lightningOcclusionFactor = (1.0 - (accumulatedDensity/3.0));
+  //   finalCloudColor += vec3(0.7,0.5,1.0)*lightningOcclusionFactor;
+  // }
+
+  if(lightningHit) {
     let lightningOcclusionFactor = (1.0 - (accumulatedDensity/3.0));
     finalCloudColor += vec3(0.7,0.5,1.0)*lightningOcclusionFactor;
   }

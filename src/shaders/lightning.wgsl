@@ -19,6 +19,8 @@ struct LightningState {
     tertiaryCount: u32,
     failedBranches: u32,
     padding: u32,
+    bb_minCorner: vec4f,
+    bb_maxCorner: vec4f,
 };
 
 struct LightningChannel {
@@ -424,5 +426,12 @@ fn summarize() {
         state.status = 1u;
     } else if (primary.status == CAPACITY_REACHED) {
         state.status = 2u;
+    }
+    // calculate minimum and maximum corners for lightning bounding box
+    state.bb_minCorner = nodes[0].position;
+    state.bb_maxCorner = nodes[0].position;
+    for(var nodeIndex = 0u; nodeIndex < arrayLength(&nodes); nodeIndex++) {
+        state.bb_minCorner = min(state.bb_minCorner, nodes[nodeIndex].position);
+        state.bb_maxCorner = max(state.bb_maxCorner, nodes[nodeIndex].position);
     }
 }

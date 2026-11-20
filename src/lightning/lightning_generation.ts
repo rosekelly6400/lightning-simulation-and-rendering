@@ -19,7 +19,7 @@ const totalChannels = 1 + lightningLayout.secondaryChannels + lightningLayout.te
 const totalAttractors = lightningLayout.primaryAttractors +
     lightningLayout.secondaryChannels * lightningLayout.secondaryAttractors +
     lightningLayout.tertiaryChannels * lightningLayout.tertiaryAttractors;
-const resultBytes = 32;
+const resultBytes = 64;
 const stepsPerDispatch = 32;
 
 export function createSeededRandom(seed: number) {
