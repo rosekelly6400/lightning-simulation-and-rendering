@@ -42,7 +42,8 @@ struct LightningBoltPoints {
 
 struct FragInput
 {
-    @builtin(position) fragPos: vec4f
+    @builtin(position) fragPos: vec4f,
+    @location(0) vertPos: vec4f,
 }
 
 fn random3( p : vec3f) -> vec3f {
@@ -369,11 +370,8 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
   var inside_cloud_stepFactor = 0.04;
 
   let rayOrigin = cameraUniforms.cameraPos.xyz;
-  let rayRightShift = cameraUniforms.cameraRight * cameraUniforms.pixelSize.x * (in.fragPos.x - cameraUniforms.screenX*0.5);
-  let rayUpShift = cameraUniforms.cameraUp * cameraUniforms.pixelSize.y * (in.fragPos.y - cameraUniforms.screenY*0.5);
+  let rayDir = normalize(in.vertPos.xyz - rayOrigin).xyz;
 
-  // maybe rayRightShift shouldn't be positive ? (currently positive because controls are unintuitive otherwise)
-  let rayDir = normalize(cameraUniforms.cameraFront + rayRightShift - rayUpShift).xyz;
   let lightPos = vec3(0.0,25.0,0.0);
 
   var stepFactor = outside_cloud_stepFactor;
