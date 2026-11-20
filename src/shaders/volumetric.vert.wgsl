@@ -6,12 +6,18 @@ struct CameraUniforms {
     nClip: f32,
     fClip: f32,
     screenX: f32,
-    screenY: f32
+    screenY: f32,
+    cameraUp: vec4f,
+    cameraRight: vec4f,
+    cameraFront: vec4f,
+    cameraPos: vec4f,
+    pixelSize: vec4f
 }
 
 struct VertOutput
 {
-    @builtin(position) fragPos: vec4f
+    @builtin(position) fragPos: vec4f,
+    @location(0) vertPos: vec4f,
 }
 
 @group(${bindGroup_uniforms}) @binding(0) var<uniform> cameraUniforms: CameraUniforms;
@@ -23,14 +29,14 @@ fn main(
 ) -> VertOutput {
 
   // render triangle covering camera
-
-  var fullscreenPos = array<vec3<f32>, 3>(
-    vec3(0.0, 5.0, 0.0),
-    vec3(-2.5, -1.0, 0.0),
-    vec3(2.5, -1.0, 0.0)
+  var pos = array<vec3<f32>, 3>(
+    (cameraUniforms.cameraPos + cameraUniforms.cameraFront + 2.5 * cameraUniforms.cameraUp).xyz,
+    (cameraUniforms.cameraPos + cameraUniforms.cameraFront + 1.5 * cameraUniforms.cameraRight - 1.5 * cameraUniforms.cameraUp).xyz,
+    (cameraUniforms.cameraPos + cameraUniforms.cameraFront - 1.5 * cameraUniforms.cameraRight - 1.5 * cameraUniforms.cameraUp).xyz
   );
 
   var out: VertOutput;
-  out.fragPos = vec4<f32>(fullscreenPos[VertexIndex], 1.0);
+  out.fragPos =  cameraUniforms.viewProjMat * vec4<f32>(pos[VertexIndex], 1.0);
+  out.vertPos = vec4<f32>(pos[VertexIndex], 1.0);
   return out;
 }

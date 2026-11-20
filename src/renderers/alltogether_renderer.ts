@@ -107,6 +107,7 @@ export class allRenderer extends renderer.Renderer {
 
         //added!
         this.lightning.compute(encoder);
+        this.lightning.updateReveal(this.dt);
 
         const renderPass  = encoder.beginRenderPass(renderPassDescriptor);
 
@@ -120,5 +121,6 @@ export class allRenderer extends renderer.Renderer {
         renderPass.end();
 
         renderer.device.queue.submit([encoder.finish()]); // tell it to render on screen
+        this.lightning.afterSubmit();
     }
 }
