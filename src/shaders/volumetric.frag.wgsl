@@ -387,8 +387,8 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
 
   var css = vec3(0.6, 0.6, 0.6); // cloud base color
 
-  var lightningPointsArray = array<vec3f, 3>();
-  var lightningPointsArraySize = 3;
+  var lightningPointsArray = array<vec3f, 2>();
+  var lightningPointsArraySize = 2;
   //lightningPointsArray[0] = boltPoints.points[0].xyz;
   // lightningPointsArray[1] = vec3(0.0,-5.0,0.0);
 
@@ -446,16 +446,16 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
       // txss = txms;
 
       //SINGLE SCATTERING NAIVE BELOW
-      for(var j = 0; j < 17; j++) {
-        var shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
-        if (shadowRayCloudSample > 0.0) {
-          txss += dx *lg;
-        }
-        currMarchPos_ShadowRay += shadowRayDir*stepFactor;
-      }
+      // for(var j = 0; j < 17; j++) {
+      //   var shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
+      //   if (shadowRayCloudSample > 0.0) {
+      //     txss += dx *lg;
+      //   }
+      //   currMarchPos_ShadowRay += shadowRayDir*stepFactor;
+      // }
 
       // SINGLE SCATTERING USING GRID
-      //txss = currPosSSContribution;
+      txss = currPosSSContribution;
       
       var dp = 10.0 / txss;
       var L = 0.0795774 * dp * pow(0.5 + 0.5 * dv, dp); // 1/4pi * dp
@@ -469,39 +469,36 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
 
 
       // iterate through lightning point lights and add to cloud
-      // for(var p = 0; p < lightningPointsArraySize; p++) {
-      //   var currLightningNodePos = lightningPointsArray[p];
-      //   currMarchPos_ShadowRay = currMarchPos;
-      //   shadowRayDir = normalize(currLightningNodePos - currMarchPos);
-      //   txss = 0.0; // measure occlusion along shadow ray
-      //   dv = dot(rayDir, shadowRayDir); // dot between primary and shadow ray vectors
-      //   // This is what will be stored in lighting grid
-      //   gridIndex = convertVec3ToCloudTexIndex(currMarchPos);
-      //   currPosSSContribution = trilinearInterpolatePosToLightTexture(currMarchPos, 0);
+      for(var p = 0; p < lightningPointsArraySize; p++) {
+        var currLightningNodePos = lightningPointsArray[p];
+        currMarchPos_ShadowRay = currMarchPos;
+        shadowRayDir = normalize(currLightningNodePos - currMarchPos);
+        txss = 0.0; // measure occlusion along shadow ray
+        dv = dot(rayDir, shadowRayDir); // dot between primary and shadow ray vectors
+        // This is what will be stored in lighting grid
+        gridIndex = convertVec3ToCloudTexIndex(currMarchPos);
+        currPosSSContribution = trilinearInterpolatePosToLightTexture(currMarchPos, 0);
         
 
-      //   //SINGLE SCATTERING NAIVE BELOW
-      //   for(var j = 0; j < 17; j++) {
-      //     var shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
-      //     if (shadowRayCloudSample > 0.0) {
-      //       txss += dx *lg;
-      //     }
-      //     currMarchPos_ShadowRay += shadowRayDir*stepFactor;
-      //   }
-
-      //   // SINGLE SCATTERING USING GRID
-      //   //txss = currPosSSContribution;
+        //SINGLE SCATTERING NAIVE BELOW
+        for(var j = 0; j < 17; j++) {
+          var shadowRayCloudSample = isInsideCloud(currMarchPos_ShadowRay);
+          if (shadowRayCloudSample > 0.0) {
+            txss += dx *lg;
+          }
+          currMarchPos_ShadowRay += shadowRayDir*stepFactor;
+        }
         
-      //   dp = 10.0 / txss;
-      //   L = 0.0795774 * dp * pow(0.5 + 0.5 * dv, dp); // 1/4pi * dp
-      //   s = 1.0;
-      //   lb = exp(-1.0*txss);
-      //   ixss = L + lb;
+        dp = 10.0 / txss;
+        L = 0.0795774 * dp * pow(0.5 + 0.5 * dv, dp); // 1/4pi * dp
+        s = 1.0;
+        lb = exp(-1.0*txss);
+        ixss = L + lb;
         
 
-      //   // add to total color
-      //   finalCloudColor += occlusionFactor*css*ixss*(1.0-exp(-1.0 * dx *lg))*0.3;
-      // }
+        // add to total color
+        finalCloudColor += occlusionFactor*css*ixss*(1.0-exp(-1.0 * dx *lg))*0.4;
+      }
 
 
       // early ray termination if max density reached

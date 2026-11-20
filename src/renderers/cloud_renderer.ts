@@ -188,6 +188,7 @@ export class cloudRenderer extends renderer.Renderer {
         renderPassLightning.end();
 
         renderer.device.queue.submit([encoderLightning.finish()]); // tell it to render on screen
+        this.lightning.afterSubmit();
 
         const encoder = renderer.device.createCommandEncoder();
         const canvasTextureView = renderer.context.getCurrentTexture().createView();
