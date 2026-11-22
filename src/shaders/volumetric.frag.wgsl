@@ -349,13 +349,51 @@ fn isInsideCloud(currPos: vec3f) -> f32 {
     return 0.0;
 }
 
+fn rayleigh_phaseFunction( theta : f32) -> f32 {
+  return (3.0*(1.0+cos(theta)*cos(theta))) / 50.26548;
+} 
+
+// scattering and absorbtion 
+fn rayleigh_sigma_scattering( pos : vec3f) -> vec3f {
+  var density = exp((-1.0*pos.y)/8000.0);
+  return vec3f(5.802, 13.558, 33.1)*0.000001*density;
+} 
+
+fn mie_phaseFunction( theta : f32, g : f32) -> f32 {
+  return 0.11937 * ((1.0 - g*g)*(1.0+cos(theta)*cos(theta))) / ((2.0+g*g)*pow((1.0+g*g-2.0*g*cos(theta)), 1.5));
+} 
+
+// scattering and absorbtion 
+fn mie_sigma_scattering( pos : vec3f) -> f32 {
+  var density = exp((-1.0*pos.y)/1200.0);
+  return density*(3.996);
+} 
+
+fn mie_sigma_absorption( pos : vec3f) -> f32 {
+  var density = exp((-1.0*pos.y)/1200.0);
+  return density*(4.40);
+} 
+
+fn atmosphere_T( xa : vec3f, xb : vec3f) -> f32 {
+  var avgPos = (xa + xb) * 0.5;
+  //var sigma_total = length(rayleigh_sigma_scattering(avgPos)) + mie_sigma_scattering(avgPos) + mie_sigma_absorption(avgPos);
+  var sigma_total = mie_sigma_scattering(avgPos) + mie_sigma_absorption(avgPos);
+  
+  return exp(-1.0*sigma_total*0.0001*distance(xa, xb));
+} 
+
+fn atmosphere_S( x : vec3f, lightDir : vec3f) -> f32 {
+  // TODO: add Visibility term and adjustable t_atmos
+  return atmosphere_T(x, x + lightDir*1000.0);
+} 
+
+
 @fragment
 fn main(in: FragInput) -> @location(0) vec4<f32> {
 
   let fragPosUV = vec2(in.fragPos.x/cameraUniforms.screenX, in.fragPos.y/cameraUniforms.screenY);
 
   var maxRayMarchDistance = 30.0;
-  var finalCloudColor = vec3(0.05,0.14,0.23);
 
   let lightningPos = textureSample(positionTex, positionTexSampler, fragPosUV);
   if(lightningPos.a > 0.0) {
@@ -372,18 +410,46 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
   let rayOrigin = cameraUniforms.cameraPos.xyz;
   let rayDir = normalize(in.vertPos.xyz - rayOrigin).xyz;
 
-  let lightPos = vec3(0.0,25.0,0.0);
+  let lightPos = vec3(0.0, 25.0,0.0);
 
   var stepFactor = outside_cloud_stepFactor;
   var currMarchPos = rayOrigin + rayDir*0.001;
-  
+
+  var finalSkyColor = vec3(0.05,0.14,0.23);
+  var accumulatedCloudColor = vec3(0.0);
+  //finalSkyColor = vec3(0.0);
+
+  // NEXT: IF ANGLE IS POINTING DOWN (Y < 0 ??) then show land color probably
+  if(rayDir.y < 0.0) {
+      
+  }
+  else {
+    var l_i = normalize(lightPos);
+    // should rayDir be negated ?????
+    var theta = acos(dot(l_i, 1.0*rayDir));
+    // Mie
+    // Rayleigh
+    // Add them together
+    var cameraPos = vec3f(0.0);
+    var light_illuminance = vec3f(1.0, 1.0, 1.0);
+    var currX = cameraPos;
+    for(var i = 0; i < 15; i++) {
+      currX += rayDir*1000.0;
+      var l_scat_mie = mie_sigma_scattering(currX) * atmosphere_T(cameraPos, currX)*atmosphere_S(currX, l_i) * mie_phaseFunction(theta, 0.8)*light_illuminance;
+      var l_scat_rayleigh = rayleigh_sigma_scattering(currX) * atmosphere_T(cameraPos, currX)*atmosphere_S(currX, l_i) * rayleigh_phaseFunction(theta)*light_illuminance;
+      // ray march from origin to sky (only a few big steps) for all functions taking in x
+      // NOTE: SIGMA GOES OUTSIDE SUMMATION for different lights
+      //finalSkyColor += (l_scat_mie + l_scat_rayleigh) * 500.0;
+      finalSkyColor += l_scat_mie*0.07 + l_scat_rayleigh*10000.0 + vec3f(mie_sigma_scattering(currX)*.007);
+    }
+  }
 
   var occlusionFactor = 1.0;  // along primary ray
   var accumulatedDensity = 0.0; //used to early terminate ray at max density
   var dx = 0.9; // cloud density (uniform across cloud for now)
   var lg = inside_cloud_stepFactor;  // length of both primary and shadow ray step
 
-  var css = vec3(0.6, 0.6, 0.6); // cloud base color
+  var css = vec3(0.9, 0.9, 0.9); // cloud base color
 
   var lightningPointsArray = array<vec3f, 2>();
   var lightningPointsArraySize = 2;
@@ -463,7 +529,7 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
       
 
       // add to total color
-      finalCloudColor += occlusionFactor*css*ixss*(1.0-exp(-1.0 * dx *lg))*0.5;
+      accumulatedCloudColor += occlusionFactor*css*ixss*(1.0-exp(-1.0 * dx *lg))*0.5;
 
 
       // iterate through lightning point lights and add to cloud
@@ -495,7 +561,7 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
         
 
         // add to total color
-        finalCloudColor += occlusionFactor*css*ixss*(1.0-exp(-1.0 * dx *lg))*0.4;
+        accumulatedCloudColor += occlusionFactor*css*ixss*(1.0-exp(-1.0 * dx *lg))*0.4;
       }
 
 
@@ -511,11 +577,15 @@ fn main(in: FragInput) -> @location(0) vec4<f32> {
     currDistFromCamera = distance(currMarchPos, rayOrigin);
   }
 
+  // occlude sky behind cloud instead of just adding to it
+  let cloudOcclusionToSky = (1.0 - (accumulatedDensity/3.0));
+  finalSkyColor = cloudOcclusionToSky*finalSkyColor + accumulatedCloudColor;
   if(lightningPos.a > 0.0) {
     let lightningOcclusionFactor = (1.0 - (accumulatedDensity/3.0));
-    finalCloudColor += vec3(0.7,0.5,1.0)*lightningOcclusionFactor;
+    finalSkyColor += vec3(0.7,0.5,1.0)*lightningOcclusionFactor;
   }
+  
 
-  return vec4(finalCloudColor.xyz, 1.0);
+  return vec4(finalSkyColor.xyz, 1.0);
   
 }
