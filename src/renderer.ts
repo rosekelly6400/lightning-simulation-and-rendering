@@ -1,5 +1,6 @@
 import { Camera } from './stage/camera';
 import { Cloud_Precomputation } from './stage/cloud_precomputation';
+import { Land_Precomputation } from './stage/land_precomputation';
 import { Stage } from './stage/stage';
 import { assert } from './utils/util';
 import { Pane } from 'tweakpane';
@@ -67,6 +68,7 @@ export async function initWebGPU() {
 export abstract class Renderer {
     protected camera: Camera;
     protected cloud_precomputation: Cloud_Precomputation;
+    protected land: Land_Precomputation;
     protected pane?: Pane;
 
     private prevTime: number = 0;
@@ -76,8 +78,10 @@ export abstract class Renderer {
     constructor(stage: Stage) {
         this.camera = stage.camera;
         this.cloud_precomputation = stage.cloud_precomputation;
+        this.land = stage.land;
 
         this.frameRequestId = requestAnimationFrame((t) => this.onFrame(t));
+        this.land.calculateLandBuffer(0.0);
     }
 
     stop(): void {

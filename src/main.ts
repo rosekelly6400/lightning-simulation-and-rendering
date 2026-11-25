@@ -9,6 +9,7 @@ import { soundRenderer } from './renderers/sound_renderer';
 
 import { Camera } from './stage/camera';
 import { Cloud_Precomputation } from './stage/cloud_precomputation';
+import { Land_Precomputation } from './stage/land_precomputation';
 import { LightningGeneration } from './lightning/lightning_generation';
 import { Stage } from './stage/stage';
 
@@ -18,8 +19,9 @@ await initWebAudio(); // sound fx, gpu based sound
 
 const camera = new Camera();
 const cloud_precomputation = new Cloud_Precomputation(camera);
+const land = new Land_Precomputation(camera);
 const lightning = new LightningGeneration();
-const stage = new Stage(camera, cloud_precomputation, lightning);
+const stage = new Stage(camera, cloud_precomputation, lightning, land);
 
 var renderer: Renderer | undefined;
 

@@ -1,3 +1,4 @@
+import { Vec3 } from "wgpu-matrix";
 import {FDTD} from "./fdtd"
 import {device} from "../renderer"
 import fdtd_3d from "../shaders/sound/fdtd_3d.cs.wgsl?raw";
@@ -395,11 +396,11 @@ export class FDTD_3D extends FDTD {
         this.numsources = 0;
     }
 
-    override set_solid(mask: Float32Array): void {
-        if (mask.length !== this.solid.length) throw new Error("set_solid: wrong mask size");
+    override set_solid(micPos: Vec3, lightningPos: Vec3, landHeightData: Float32Array): void {
+        // if (mask.length !== this.solid.length) throw new Error("set_solid: wrong mask size");
 
-        this.solid.set(mask);
-        device.queue.writeBuffer(this.dev_solids, 0, this.solid);
+        // this.solid.set(mask);
+        // device.queue.writeBuffer(this.dev_solids, 0, this.solid);
     }
 
     public set_mic_at(x:number, y:number, z:number)

@@ -3,6 +3,7 @@ import * as shaders from '../shaders/shaders';
 import { Stage } from '../stage/stage';
 import {ThunderSound, generateDefaultSound, resumeAudio, bufferFromWAV, AudioHandler} from '../sound/sound'
 import { FDTD_2D } from '../sound/fdtd_2d';
+import { vec3 } from 'wgpu-matrix';
 // import { FDTD_3D } from '../sound/fdtd_3d';
 
 
@@ -114,7 +115,7 @@ export class soundRenderer extends renderer.Renderer {
 
         this.fdtd.clear_sounds(); // clear before simulating
 
-        // this.fdtd.set_solid();
+        this.fdtd.set_solid(this.camera.cameraPos, vec3.create(0.0,10.0,0.0), this.land.landTextureArray);   // currently hard coding lightning to (0, 10, 0)
 
         // const positions = new Int32Array([20,20, 20]);
         const positions = new Int32Array([20,20]);

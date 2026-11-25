@@ -1,3 +1,4 @@
+import { Vec3, vec3, Vec2, vec2 } from "wgpu-matrix";
 import {FDTD} from "./fdtd"
 import {device} from "../renderer"
 import fdtd_2d from "../shaders/sound/fdtd_2d.cs.wgsl?raw";
@@ -7,6 +8,8 @@ export class FDTD_2D extends FDTD {
 
     private dimx: number;
     private dimy: number;
+
+    private padding: number;
 
     private micposx:number=10;
     private micposy:number=10;
@@ -57,6 +60,7 @@ export class FDTD_2D extends FDTD {
 
         this.dimx = resx;
         this.dimy = resy;
+        this.padding = padding;
         this.maxsources = maxsrcs;
         this.solid = new Float32Array(resx * resy); // set to 0 for now
 
@@ -374,7 +378,55 @@ export class FDTD_2D extends FDTD {
         this.numsources = 0;
     }
 
-    override set_solid(mask: Float32Array): void {
+    override set_solid(micPos: Vec3, lightningPos: Vec3, landHeightData: Float32Array): void {
+        var micToLightningDirXZ = vec3.normalize(vec3.subtract(vec3.create(lightningPos[0], 0.0, lightningPos[2]), vec3.create(micPos[0], 0.0, micPos[2])));
+        var micToLightningDirY = vec3.normalize(vec3.subtract(vec3.create( 0.0, lightningPos[1], 0.0), vec3.create(0.0, micPos[1], 0.0)));
+        const distanceXZ = vec2.dist(vec2.create(micPos[0], micPos[2]), vec2.create(lightningPos[0], lightningPos[2]));
+        const distanceY = Math.abs(lightningPos[1] - micPos[1]);
+
+        const cellWidth = distanceXZ / this.dimx;
+        const cellHeight = distanceY / this.dimy;
+        const cellSize = this.dx;  // cells are squares so final cell width and height are equal to cellSize
+
+        // fill solids
+        var mask = new Float32Array(this.dimx * this.dimy);
+        var midpointPos = vec3.mulScalar(vec3.add(micPos, lightningPos), 0.5);  // midpoint between lightning and camera
+        // set currentPos to 0,0 index position of grid centered on midpoint (bottom left corner)
+        var currentPos = vec3.subtract(midpointPos, vec3.mulScalar(micToLightningDirY, cellSize*this.dimy*0.5));    // subtract half of y grid width
+        currentPos = vec3.subtract(currentPos, vec3.mulScalar(micToLightningDirXZ, cellSize*this.dimx*0.5));        // subtract half of x grid width
+
+        // variables for converting xz of currentPos to landTextureArray index
+        const landbufferRowLength = Math.floor(Math.sqrt(landHeightData.length)); 
+        const originIndex = Math.floor(landbufferRowLength * 0.5)*landbufferRowLength + Math.floor(landbufferRowLength * 0.5);
+        const landbufferCellSize = 0.1;     //this is arbitrarily set currently TODO: set based on land buffer size
+
+        var oneCounter = 0;
+        for(var y = 0; y < this.dimy; y++) {
+            for(var x = 0; x < this.dimx; x++) {
+                const currIndex = y * this.dimx + x;
+
+                // set padding rows and cols to 0
+                if(y < this.padding || this.dimy - y < this.padding || 
+                   x < this.padding || this.dimx - x < this.padding ) {
+                    mask[currIndex] = 0.0;
+                }
+                else {
+                    // convert xz of currentPos to landTextureArray index
+                    var currPosToIndex = Math.floor((currentPos[0]/landbufferCellSize) + (currentPos[2]/landbufferCellSize)*landbufferRowLength + originIndex);
+
+                    if (currPosToIndex >= 0 && currPosToIndex < landHeightData.length && landHeightData[currPosToIndex] >= currentPos[1]) {
+                        mask[currIndex] = 1.0;
+                        oneCounter++
+                    }
+                    else {
+                        mask[currIndex] = 0.0;
+                    }
+                }
+                currentPos = vec3.add(currentPos, vec3.mulScalar(micToLightningDirXZ,cellSize));
+            }
+            currentPos = vec3.add(currentPos, vec3.mulScalar(micToLightningDirY,cellSize));
+        }
+
         if (mask.length !== this.solid.length) throw new Error("set_solid: wrong mask size");
 
         this.solid.set(mask);

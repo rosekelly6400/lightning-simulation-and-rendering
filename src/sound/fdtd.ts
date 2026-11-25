@@ -1,4 +1,5 @@
 import {AudioHandler} from './sound'
+import { Vec3 } from "wgpu-matrix";
 
 export abstract class FDTD {
     // Finite Difference Time Domain Abstract class, 2D and 3D implementations extend off of this. Define template functions/varibales both classes use
@@ -48,7 +49,7 @@ export abstract class FDTD {
 
     public abstract inject_sound_at(positions: Int32Array, pressures: Float32Array, times: Int32Array): void; // user can input in sounds at certain times per positions and pressures, this will be buffered into the gpu
 
-    public abstract set_solid(mask: Float32Array): void;
+    public abstract set_solid(micPos: Vec3, lightningPos: Vec3, landHeightData: Float32Array): void;
 
     public abstract clear_sounds(): void;
 
