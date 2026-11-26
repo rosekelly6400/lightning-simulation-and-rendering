@@ -8,10 +8,12 @@ export class Stage {
     cloud_precomputation: Cloud_Precomputation;
     lightning: LightningGeneration;
 
+    readonly lightningBolts: LightningGeneration[];
 
     constructor(camera: Camera, cloud_precomputation: Cloud_Precomputation, lightning: LightningGeneration) {
         this.camera = camera;
         this.cloud_precomputation = cloud_precomputation;
         this.lightning = lightning;
+        this.lightningBolts = [lightning];
     }
 }

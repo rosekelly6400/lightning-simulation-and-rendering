@@ -55,10 +55,10 @@ struct LightningParameters {
 
 override stepsPerDispatch: u32 = 32u;
 
-const PRIMARY_NODES = 512u;
-const SECONDARY_CHANNELS = 16u;
+const PRIMARY_NODES = 1024u;
+const SECONDARY_CHANNELS = 128u;
 const SECONDARY_NODES = 128u;
-const TERTIARY_CHANNELS = 32u;
+const TERTIARY_CHANNELS = 512u;
 const TERTIARY_NODES = 64u;
 const PRIMARY_ATTRACTORS = 2049u;
 const SECONDARY_ATTRACTORS = 257u;
@@ -314,7 +314,7 @@ fn prepareSecondary() {
     if (channels[0].status != REACHED) {
         return;
     }
-    var roots: array<u32, 16>;
+    var roots: array<u32, SECONDARY_CHANNELS>;
     var candidateCount = 0u;
     for (var localIndex = 1u; localIndex + 1u < channels[0].nodeCount; localIndex++) {
         if (branchRandom(localIndex * 37u) < params.secondaryProbability) {
@@ -358,8 +358,8 @@ fn growSecondary(@builtin(global_invocation_id) id: vec3u) {
 @compute @workgroup_size(1)
 fn prepareTertiary() {
     state.tertiaryCount = 0u;
-    var roots: array<u32, 32>;
-    var parents: array<u32, 32>;
+    var roots: array<u32, TERTIARY_CHANNELS>;
+    var parents: array<u32, TERTIARY_CHANNELS>;
     var candidateCount = 0u;
     for (var parentIndex = 1u; parentIndex <= state.secondaryCount; parentIndex++) {
         let parent = channels[parentIndex];

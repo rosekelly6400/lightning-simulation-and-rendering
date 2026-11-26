@@ -1,24 +1,21 @@
 import * as renderer from '../renderer';
 import lightningShader from '../shaders/lightning.wgsl';
+import type { Stage } from '../stage/stage';
 
-// Fixed channel ranges avoid append races between independent branches.
 export const lightningLayout = {
-    primaryNodes: 512,
-    secondaryChannels: 16,
+    primaryNodes: 1024,
+    secondaryChannels: 128,
     secondaryNodes: 128,
-    tertiaryChannels: 32,
+    tertiaryChannels: 512,
     tertiaryNodes: 64,
     primaryAttractors: 2049,
     secondaryAttractors: 257,
     tertiaryAttractors: 129,
 };
 const maxNodes = lightningLayout.primaryNodes;
-const totalNodes = maxNodes + lightningLayout.secondaryChannels * lightningLayout.secondaryNodes +
-    lightningLayout.tertiaryChannels * lightningLayout.tertiaryNodes;
+const totalNodes = maxNodes + lightningLayout.secondaryChannels * lightningLayout.secondaryNodes + lightningLayout.tertiaryChannels * lightningLayout.tertiaryNodes;
 const totalChannels = 1 + lightningLayout.secondaryChannels + lightningLayout.tertiaryChannels;
-const totalAttractors = lightningLayout.primaryAttractors +
-    lightningLayout.secondaryChannels * lightningLayout.secondaryAttractors +
-    lightningLayout.tertiaryChannels * lightningLayout.tertiaryAttractors;
+const totalAttractors = lightningLayout.primaryAttractors + lightningLayout.secondaryChannels * lightningLayout.secondaryAttractors + lightningLayout.tertiaryChannels * lightningLayout.tertiaryAttractors;
 const resultBytes = 32;
 const stepsPerDispatch = 32;
 
@@ -36,8 +33,8 @@ export function createSeededRandom(seed: number) {
 
 // Attractor struct
 export interface Attractor {
-  position: [number, number, number];
-  active: boolean;
+    position: [number, number, number];
+    active: boolean;
 }
 
 /* 
@@ -46,27 +43,51 @@ export interface Attractor {
     - endPoint: where we end our bolt
     - pointCount: how many attractors we want
     - radius: radius of our attractor cloud (we do a cylinder for the volume)
+    - seed: seed for our generation so that it is deterministic
 */
 export function generateAttractors(
-  startPoint: [number, number, number],
-  endPoint: [number, number, number],
-  pointCount: number,
-  radius: number,
-  seed = 12345
+    startPoint: [number, number, number],
+    endPoint: [number, number, number],
+    pointCount: number,
+    radius: number,
+    seed = 12345
 ): Attractor[] {
-  const attractors: Attractor[] = [];
-  const random = createSeededRandom(seed);
+    const attractors: Attractor[] = [];
+    const random = createSeededRandom(seed);
+    const dx = endPoint[0] - startPoint[0];
+    const dy = endPoint[1] - startPoint[1];
+    const dz = endPoint[2] - startPoint[2];
 
-  for (let i = 0; i < pointCount; i++) {
-    const t = random();
-    const angle = random() * Math.PI * 2;
-    const r = radius * Math.sqrt(random());
+    const delta = [dx, dy, dz];
+    const distance = Math.hypot(dx, dy, dz);
+    const forward = [dx / distance, dy / distance, dz / distance];
+    const sideLength = Math.hypot(forward[0], forward[1]);
+    const side = sideLength > 0.0001 ? [-forward[1] / sideLength, forward[0] / sideLength, 0] : [1, 0, 0];
+    const up = [
+        forward[1] * side[2] - forward[2] * side[1],
+        forward[2] * side[0] - forward[0] * side[2],
+        forward[0] * side[1] - forward[1] * side[0],
+    ];
 
-    const x = startPoint[0] + (endPoint[0] - startPoint[0]) * t + r * Math.cos(angle);
-    const y = startPoint[1] + (endPoint[1] - startPoint[1]) * t;
-    const z = startPoint[2] + (endPoint[2] - startPoint[2]) * t + r * Math.sin(angle);
+    for (let i = 0; i < pointCount; i++) {
+        const t = random();
+        const angle = random() * Math.PI * 2;
+        const r = radius * Math.sqrt(random());
 
-    attractors.push({position: [x, y, z], active: true,});
+        const sideOffset = r * Math.cos(angle);
+        const a = r * Math.sin(angle);
+
+        const offset = [
+            side[0] * sideOffset + up[0] * a, 
+            side[1] * sideOffset + up[1] * a, 
+            side[2] * sideOffset + up[2] * a, 
+        ];
+
+        const x = startPoint[0] + delta[0] * t + offset[0];
+        const y = startPoint[1] + delta[1] * t + offset[1];
+        const z = startPoint[2] + delta[2] * t + offset[2];
+
+        attractors.push({position: [x, y, z], active: true,});
   }
 
   return attractors;
@@ -78,30 +99,30 @@ export function createAttractorBuffer(
   attractors: Attractor[],
   capacity = attractors.length
 ): GPUBuffer {
-  const data = packAttractors(attractors);
+    const data = packAttractors(attractors);
 
-  const buffer = device.createBuffer({
-    label: "Attractors",
-    size: capacity * 16,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-  });
-  device.queue.writeBuffer(buffer, 0, data);
-  return buffer;
+    const buffer = device.createBuffer({
+        label: "Attractors",
+        size: capacity * 16,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(buffer, 0, data);
+    return buffer;
 }
 
 function packAttractors(attractors: Attractor[]) {
-  const data = new Float32Array(attractors.length * 4);
+    const data = new Float32Array(attractors.length * 4);
 
-  for (let i = 0; i < attractors.length; i++) {
-    const offset = i * 4;
+    for (let i = 0; i < attractors.length; i++) {
+        const offset = i * 4;
 
-    data[offset] = attractors[i].position[0];
-    data[offset + 1] = attractors[i].position[1];
-    data[offset + 2] = attractors[i].position[2];
-    data[offset + 3] = attractors[i].active ? 1 : 0;
-  }
+        data[offset] = attractors[i].position[0];
+        data[offset + 1] = attractors[i].position[1];
+        data[offset + 2] = attractors[i].position[2];
+        data[offset + 3] = attractors[i].active ? 1 : 0;
+    }
 
-  return data;
+    return data;
 }
 
 // Creating da pipeline
@@ -112,22 +133,22 @@ export function createLightningPipeline(
   module?: GPUShaderModule
 ): GPUComputePipeline {
 
-  const shaderModule = module ?? device.createShaderModule({
-    label: 'Lightning Growth Shader',
-    code: lightningShader,
-  });
+    const shaderModule = module ?? device.createShaderModule({
+        label: 'Lightning Growth Shader',
+        code: lightningShader,
+    });
 
-  const pipeline = device.createComputePipeline({
-    label: 'Lightning Growth Pipeline',
-    layout,
-    compute: {
-      module: shaderModule,
-      entryPoint,
-      constants: ['main', 'growSecondary', 'growTertiary'].includes(entryPoint) ? { stepsPerDispatch } : {},
-    },
-  });
+    const pipeline = device.createComputePipeline({
+        label: 'Lightning Growth Pipeline',
+        layout,
+        compute: {
+        module: shaderModule,
+        entryPoint,
+        constants: ['main', 'growSecondary', 'growTertiary'].includes(entryPoint) ? { stepsPerDispatch } : {},
+        },
+    });
 
-  return pipeline;
+    return pipeline;
 }
 
 // we can pass these in rn. lmk if yall want others added
@@ -161,7 +182,18 @@ export const defaultLightningParameters: LightningParameters = {
 
 export class LightningGeneration {
     params = { ...defaultLightningParameters };
-    debugReveal = { duration: 2.0 };
+    startPoint = { x: 0, y: 5, z: 0 };
+    endPoint = { x: 0, y: -5, z: 0 };
+
+    private pointTuple(point: { x: number; y: number; z: number }): [number, number, number] {
+        return [point.x, point.y, point.z];
+    }
+
+    private endpointDistance() {
+        return Math.hypot(this.endPoint.x - this.startPoint.x,
+            this.endPoint.y - this.startPoint.y, this.endPoint.z - this.startPoint.z);
+    }
+    reveal = { duration: 2.0 };
     debugInfo = {
         status: 'Waiting to generate',
         nodeCount: 1,
@@ -200,8 +232,8 @@ export class LightningGeneration {
     constructor() {
       // default start and end point, number of attractors, and radius
         const attractors = generateAttractors(
-            [0, 5, 0],
-            [0, -5, 0],
+            this.pointTuple(this.startPoint),
+            this.pointTuple(this.endPoint),
             2048,
             2.0,
             this.params.seed
@@ -209,7 +241,7 @@ export class LightningGeneration {
 
         //adding last pt in attractor list
         attractors.push({
-            position: [0, -5, 0],
+            position: this.pointTuple(this.endPoint),
             active: true,
         });
 
@@ -314,9 +346,9 @@ export class LightningGeneration {
             params.influenceRadius, params.deletionRadius,
             params.stepLength, params.directionWeight,
         ]);
-        // WGSL reads this member as u32; do not convert the seed to a float.
+
         new Uint32Array(data)[4] = params.seed;
-        // UI percentages become fractions in WGSL, after the original 32-byte header.
+
         new Float32Array(data).set([
             params.secondaryMinLengthPercent / 100,
             params.secondaryMaxLengthPercent / 100,
@@ -330,44 +362,25 @@ export class LightningGeneration {
 
     private initialNode() {
         const data = new ArrayBuffer(32);
-        new Float32Array(data).set([0, 5, 0, 1]);
-        new Uint32Array(data)[7] = 1; // parent, channel, depth, valid.
+        new Float32Array(data).set([...this.pointTuple(this.startPoint), 1]);
+        new Uint32Array(data)[7] = 1; // parent, channel, depth, valid
         return data;
     }
 
     private initialState() {
-        // nodeCount, primary status, endpoint distance, maximum depth, branch counts and failures.
+        // nodeCount, primary status, endpoint distance, maximum depth, branch counts and failures
         const data = new ArrayBuffer(resultBytes);
         new Uint32Array(data)[0] = 1;
-        new Float32Array(data)[2] = 10;
+        new Float32Array(data)[2] = this.endpointDistance();
         return data;
     }
 
     // called when we reset the sim with the new bolt params
     regenerate(params: LightningParameters) {
-        if (!Number.isFinite(params.influenceRadius) || params.influenceRadius <= 0 ||
-            !Number.isFinite(params.deletionRadius) || params.deletionRadius <= 0 ||
-            !Number.isFinite(params.stepLength) || params.stepLength <= 0 ||
-            !Number.isFinite(params.directionWeight) || params.directionWeight < 0 || params.directionWeight > 1) {
-            throw new Error('Lightning radii and step length must be positive; endpoint weight must be between 0 and 1.');
-        }
-        if (!Number.isInteger(params.seed) || params.seed < 0 || params.seed > 0xFFFFFFFF) {
-            throw new Error('Lightning seed must be an integer between 0 and 4294967295.');
-        }
-        for (const [minimum, maximum, probability] of [
-            [params.secondaryMinLengthPercent, params.secondaryMaxLengthPercent, params.secondaryProbabilityPercent],
-            [params.tertiaryMinLengthPercent, params.tertiaryMaxLengthPercent, params.tertiaryProbabilityPercent],
-        ]) {
-            if (!Number.isFinite(minimum) || !Number.isFinite(maximum) ||
-                minimum <= 0 || maximum < minimum || maximum > 100 ||
-                !Number.isFinite(probability) || probability < 0 || probability > 100) {
-                throw new Error('Branch lengths must satisfy 0 < minimum <= maximum <= 100%; probability must be 0–100%.');
-            }
-        }
         this.uploadParameters(params);
         renderer.device.queue.writeBuffer(this.lightningBoltPointBuffer, 0, new Uint8Array(16 + maxNodes * 16));
-        const attractors = generateAttractors([0, 5, 0], [0, -5, 0], 2048, 2.0, params.seed);
-        attractors.push({ position: [0, -5, 0], active: true });
+        const attractors = generateAttractors(this.pointTuple(this.startPoint), this.pointTuple(this.endPoint), 2048, 2.0, params.seed);
+        attractors.push({ position: this.pointTuple(this.endPoint), active: true });
         renderer.device.queue.writeBuffer(this.attractorBuffer, 0, packAttractors(attractors));
         renderer.device.queue.writeBuffer(this.lightningNodeBuffer, 0, new Uint8Array(totalNodes * 32));
         renderer.device.queue.writeBuffer(this.lightningNodeBuffer, 0, this.initialNode());
@@ -379,7 +392,7 @@ export class LightningGeneration {
         this.revealDepth = 0;
         this.revealElapsed = 0;
         Object.assign(this.debugInfo, {
-            status: 'Waiting to generate', nodeCount: 1, endpointDistance: 10, generationMs: 0,
+            status: 'Waiting to generate', nodeCount: 1, endpointDistance: this.endpointDistance(), generationMs: 0,
             secondaryCount: 0, tertiaryCount: 0, failedBranches: 0,
         });
     }
@@ -406,11 +419,9 @@ export class LightningGeneration {
         // Preparation and growth are separate, so another scheduler can interleave them later.
         this.encodePass(encoder, this.lightningPipeline, Math.ceil((maxNodes - 1) / stepsPerDispatch));
         this.encodePass(encoder, this.branchPipelines.prepareSecondary, 1);
-        this.encodePass(encoder, this.branchPipelines.growSecondary,
-            Math.ceil((lightningLayout.secondaryNodes - 1) / stepsPerDispatch), lightningLayout.secondaryChannels);
+        this.encodePass(encoder, this.branchPipelines.growSecondary, Math.ceil((lightningLayout.secondaryNodes - 1) / stepsPerDispatch), lightningLayout.secondaryChannels);
         this.encodePass(encoder, this.branchPipelines.prepareTertiary, 1);
-        this.encodePass(encoder, this.branchPipelines.growTertiary,
-            Math.ceil((lightningLayout.tertiaryNodes - 1) / stepsPerDispatch), lightningLayout.tertiaryChannels);
+        this.encodePass(encoder, this.branchPipelines.growTertiary, Math.ceil((lightningLayout.tertiaryNodes - 1) / stepsPerDispatch), lightningLayout.tertiaryChannels);
         this.encodePass(encoder, this.branchPipelines.summarize, 1);
 
         const buffer = renderer.device.createBuffer({
@@ -433,7 +444,7 @@ export class LightningGeneration {
         pass.end();
     }
 
-    // Call after submitting the encoder containing generation and the result copy.
+    // call after submitting the encoder containing generation and the result copy
     afterSubmit() {
         const readback = this.readback;
         if (!readback || readback.started) {
@@ -484,9 +495,35 @@ export class LightningGeneration {
             return;
         }
         this.revealElapsed += Math.max(0, deltaTime) / 1000;
-        const progress = this.debugReveal.duration <= 0 ? 1 :
-            Math.min(1, this.revealElapsed / this.debugReveal.duration);
+        const progress = this.reveal.duration <= 0 ? 1 :
+            Math.min(1, this.revealElapsed / this.reveal.duration);
         this.revealDepth = Math.floor(this.maximumDepth * progress + 0.000001);
         renderer.device.queue.writeBuffer(this.lightningRevealBuffer, 0, new Float32Array([this.revealDepth, 0, 0, 0]));
     }
+}
+
+export function addLightningBolt(stage: Stage, source = stage.lightning) {
+    const bolt = new LightningGeneration();
+    bolt.params = { ...source.params, seed: (source.params.seed + 1) >>> 0 };
+    bolt.startPoint = { ...source.startPoint, x: source.startPoint.x + 1 };
+    bolt.endPoint = { ...source.endPoint, x: source.endPoint.x + 1 };
+    bolt.reveal.duration = source.reveal.duration;
+    try {
+        bolt.regenerate(bolt.params);
+    } catch (error) {
+        bolt.destroy();
+        throw error;
+    }
+    stage.lightningBolts.push(bolt);
+    return bolt;
+}
+
+export function removeLightningBolt(stage: Stage, bolt: LightningGeneration) {
+    const index = stage.lightningBolts.indexOf(bolt);
+    if (index < 0 || stage.lightningBolts.length === 1) {
+        return;
+    }
+    stage.lightningBolts.splice(index, 1);
+    stage.lightning = stage.lightningBolts[0];
+    bolt.destroy();
 }

@@ -1,9 +1,9 @@
 # Shared main-bolt points
 
-Use `stage.lightning.lightningBoltPointBuffer`. This single storage buffer has
-a `u32` point count at byte 0, 12 bytes of alignment padding, then ordered
-`vec4f` positions starting at byte 16. Positions are in simulation world
-coordinates; use `.xyz`. Includes the starting node and main-channel nodes
+Use stage.lightning.lightningBoltPointBuffer. This single storage buffer has
+a 32 point count at byte 0, 12 bytes of alignment padding, then ordered
+vec4f positions starting at byte 16. Positions are in simulation world
+coordinates, so use .xyz. This includes the starting node and main channel nodes
 only, without secondary or tertiary branches.
 
 Cloud and sound shaders can declare it as follows (choose their own binding):
@@ -21,7 +21,7 @@ var<storage, read> boltPoints: LightningBoltPoints;
 Use a `read-only-storage` buffer entry in the consumer's bind group layout.
 Lightning generation binds the same buffer as writable storage to produce it.
 Only read `boltPoints.points[i]` for `i < boltPoints.count`. Consecutive points
-define segments. `primaryPointCapacity` (512) is capacity, not the valid count.
+define segments. `primaryPointCapacity` (1024) is capacity, not the valid count.
 
 The final generation pass exports the full main bolt, independent of debug
 reveal. Encode consuming passes after `stage.lightning.compute(encoder)`, or
@@ -35,3 +35,13 @@ and positions as floats starting at byte 16. It cannot be mapped directly.
 CPU audio integration is left to the sound implementation.
 
 The generator owns and destroys the buffer; consumers should not destroy it.
+
+
+## Multiple bolts
+
+`stage.lightningBolts` contains all current generation instances. Each has its
+own `lightningBoltPointBuffer`, endpoints, settings, and generation state.
+Cloud/sound consumers should iterate this collection and bind each bolt's
+buffer. `stage.lightning` remains the first bolt for existing single-bolt code.
+Removed bolts destroy their buffers: discard any associated consumer bind
+groups. Bolts persist when switching between renderer modes.

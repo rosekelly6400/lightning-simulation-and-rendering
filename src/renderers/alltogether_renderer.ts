@@ -2,11 +2,10 @@ import * as renderer from '../renderer';
 import * as shaders from '../shaders/shaders';
 import { Stage } from '../stage/stage';
 import {createPane} from '../renderer';
-import { LightningGeneration } from '../lightning/lightning_generation';
 import { LightningDrawing } from './lightning_renderer';
 
 export class allRenderer extends renderer.Renderer {
-    lightning: LightningGeneration;
+    private stage: Stage;
     lightningDrawing: LightningDrawing;
     sceneUniformsBindGroupLayout: GPUBindGroupLayout;
     sceneUniformsBindGroup: GPUBindGroup;
@@ -23,8 +22,8 @@ export class allRenderer extends renderer.Renderer {
         this.pane.addInput(this.params, 'clearBlue', {min: 0, max: 1});
 
         // moved all my lightning drawing and pipelines setup in lightning renderer so it doesnt get 2 cluttered here
-        this.lightning = stage.lightning;
-        this.lightningDrawing = new LightningDrawing(stage, this.lightning);
+        this.stage = stage;
+        this.lightningDrawing = new LightningDrawing(stage, stage.lightning);
         // ui for lightning
         const lightningControls = this.pane.addFolder({title: 'Lightning Bolt'});
         this.lightningDrawing.addControls(lightningControls);
@@ -106,8 +105,10 @@ export class allRenderer extends renderer.Renderer {
         // if we want to do a computePass we need to initialize a compute pipeline as well, not shown here
 
         //added!
-        this.lightning.compute(encoder);
-        this.lightning.updateReveal(this.dt);
+        for (const bolt of this.stage.lightningBolts) {
+            bolt.compute(encoder);
+            bolt.updateReveal(this.dt);
+        }
 
         const renderPass  = encoder.beginRenderPass(renderPassDescriptor);
 
@@ -121,6 +122,8 @@ export class allRenderer extends renderer.Renderer {
         renderPass.end();
 
         renderer.device.queue.submit([encoder.finish()]); // tell it to render on screen
-        this.lightning.afterSubmit();
+        for (const bolt of this.stage.lightningBolts) {
+            bolt.afterSubmit();
+        }
     }
 }

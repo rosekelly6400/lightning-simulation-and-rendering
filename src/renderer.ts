@@ -37,7 +37,29 @@ export async function initWebGPU() {
         throw new Error("No WebGPU adapter");
     }
 
-    device = await adapter.requestDevice();
+    device = await adapter.requestDevice(
+
+             {
+        requiredLimits: { 
+        maxComputeWorkgroupStorageSize: adapter.limits.maxComputeWorkgroupStorageSize,
+            maxStorageBufferBindingSize: adapter.limits. maxStorageBufferBindingSize,
+            maxBufferSize: adapter.limits.maxBufferSize,
+            maxStorageBuffersPerShaderStage: adapter.limits.maxStorageBuffersPerShaderStage,
+            maxComputeInvocationsPerWorkgroup: adapter.limits.maxComputeInvocationsPerWorkgroup
+        },
+    }
+    );
+
+     // change to false if we don't want to print out these numbers
+    if (true) {
+        const L = device.limits;
+        console.log("storage binding size:", L.maxStorageBufferBindingSize / 2**20, "MiB");
+        console.log("max buffer size:", L.maxBufferSize / 2**20, "MiB");
+        console.log("storage buffers per stage:", L.maxStorageBuffersPerShaderStage);          // a count
+        console.log("workgroup storage:", L.maxComputeWorkgroupStorageSize / 1024, "KiB");      // bytes
+        console.log("max invocations per workgroup:", L.maxComputeInvocationsPerWorkgroup);
+        console.log("max workgroup size xyz:", L.maxComputeWorkgroupSizeX, L.maxComputeWorkgroupSizeY, L.maxComputeWorkgroupSizeZ);
+    } 
 
     canvas = document.querySelector<HTMLCanvasElement>('#webgpu-canvas');
     assert(canvas !== null);
@@ -104,3 +126,7 @@ export abstract class Renderer {
         this.frameRequestId = requestAnimationFrame((t) => this.onFrame(t));
     }
 }
+
+
+
+   

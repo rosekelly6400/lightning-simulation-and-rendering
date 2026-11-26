@@ -58,9 +58,9 @@ fn boltVertex(
 
     /*
     this was for debugging the secondary and tertiary branches
-    if (child.channelIndex >= 1u && child.channelIndex <= 16u) {
+    if (child.channelIndex >= 1u && child.channelIndex <= 128u) {
         output.color = vec4f(0.0, 1.0, 1.0, 1.0); // Secondary: cyan
-    } else if (child.channelIndex >= 17u) {
+    } else if (child.channelIndex >= 129u) {
         output.color = vec4f(1.0, 0.3, 0.8, 1.0); // Tertiary: pink
     }
     */
