@@ -4,7 +4,19 @@ struct CloudTextureSet {
     cloudTexture: array<f32>
 }
 
-@group(${bindGroup_uniforms}) @binding(0) var<storage, read_write> lightGridTextureSet: CloudTextureSet;
+struct LightTextureSet {
+    numElements: u32,
+    rowSize: u32,
+    cloudTexture: array<f32>
+}
+
+struct LightningBoltPoints {
+    count: u32,
+    // vec4f alignment places the first point at byte 16.
+    points: array<vec4f>,
+};
+
+@group(${bindGroup_uniforms}) @binding(0) var<storage, read_write> lightGridTextureSet: LightTextureSet;
 @group(${bindGroup_uniforms}) @binding(1) var<uniform> time: f32;
 @group(${bindGroup_uniforms}) @binding(2) var<storage, read> cloudTextureSet: CloudTextureSet;
 
@@ -15,7 +27,7 @@ fn convertVec3ToCloudTexIndex(pos: vec3f) -> i32 {
 
 fn trilinearInterpolatePosToTexture(pos: vec3f) -> f32 {
   var halfRow = 0.5*f32(cloudTextureSet.rowSize);
-  var factoredPos = pos*14.0;
+  var factoredPos = pos*12.0;
   var flooredPos = vec3(floor(factoredPos.x+halfRow), floor(factoredPos.y+halfRow), floor(factoredPos.z+halfRow));
 
   // Prevent Tiling
@@ -57,10 +69,15 @@ fn trilinearInterpolatePosToTexture(pos: vec3f) -> f32 {
 fn isInsideCloud(currPos: vec3f) -> f32 {
     let index = convertVec3ToCloudTexIndex(currPos);
     let noiseVal = trilinearInterpolatePosToTexture(currPos);
-    let maxY = 8.0;
-    let noiseLimitAugmentY = 0.2 * (abs(currPos.y)/maxY);
+    let maxY = 7.0;
+    let maxX = 7.0;
+    let noiseLimitAugmentY = 0.4 * (abs(currPos.y)/maxY)*(abs(currPos.y)/maxY);
+    let noiseLimitAugmentX = 0.3 * (abs(currPos.x)/maxX)*(abs(currPos.x)/maxX);
+    let noiseLimitAugmentZ = 0.3 * (abs(currPos.z)/maxX)*(abs(currPos.z)/maxX);
+    var totalAugment = max(noiseLimitAugmentY, noiseLimitAugmentX);
+    totalAugment = max(totalAugment, noiseLimitAugmentZ);
     if (currPos.y > -maxY && currPos.y < maxY ) {
-      if(noiseVal > 0.5+noiseLimitAugmentY) {
+      if(noiseVal > 0.4+totalAugment) {
         return noiseVal;
       }
 
@@ -92,14 +109,19 @@ fn main(@builtin(global_invocation_id) globalIdx: vec3u) {
 
 
     // BELOW VARS NEED TO MATCH  VOLUMETRIC EXACTLY
-    var outside_cloud_stepFactor = 0.1;
-    var inside_cloud_stepFactor = 0.02;
+    var lightningPointsArray = array<vec3f, 2>();
+    var lightningPointsArraySize = 2;
+    lightningPointsArray[0] = vec3(0.0,5.0,0.0);
+    lightningPointsArray[1] = vec3(0.0,-5.0,0.0);
 
-    let lightPos = vec3(0.0,5.0,0.0);
+    var outside_cloud_stepFactor = 0.1;
+    var inside_cloud_stepFactor = 0.04;
+
+    let lightPos = vec3(0.0,25.0,0.0);
 
     var occlusionFactor = 1.0;  // along primary ray
     var accumulatedDensity = 0.0; //used to early terminate ray at max density
-    var dx = 0.4; // cloud density (uniform across cloud for now)
+    var dx = 0.9; // cloud density (uniform across cloud for now)
     var lg = inside_cloud_stepFactor;  // length of both primary and shadow ray step
 
     var currMarchPos_ShadowRay = unfactoredPos;
