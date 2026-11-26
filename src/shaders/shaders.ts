@@ -3,6 +3,7 @@ import fragRaw from './red.frag.wgsl';
 import volumetricVertRaw from './volumetric.vert.wgsl';
 import volumetricFragRaw from './volumetric.frag.wgsl';
 import cloudComputeRaw from './cloud_computation.cs.wgsl';
+import lightGridComputeRaw from './lightGrid_computation.cs.wgsl';
 
 
 export const constants = {
@@ -29,3 +30,4 @@ export const fragWGSL: string = evalShaderRaw(fragRaw);
 export const volumetricVertWGSL: string = evalShaderRaw(volumetricVertRaw);
 export const volumetricFragWGSL: string = evalShaderRaw(volumetricFragRaw);
 export const cloudComputeSrc: string = evalShaderRaw(cloudComputeRaw);
+export const lightGridComputeSrc: string = evalShaderRaw(lightGridComputeRaw);
