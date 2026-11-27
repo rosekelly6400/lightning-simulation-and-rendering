@@ -37,6 +37,11 @@ export class allRenderer extends renderer.Renderer {
                     binding: 0,
                     visibility: GPUShaderStage.VERTEX,
                     buffer: { type: "uniform" }
+                },
+                { // cloud texture set
+                    binding: 1,
+                    visibility: GPUShaderStage.VERTEX,
+                    buffer: { type: "read-only-storage" }
                 }
             ]
         });
@@ -49,6 +54,10 @@ export class allRenderer extends renderer.Renderer {
                 {
                     binding: 0,
                     resource: { buffer: this.camera.uniformsBuffer }
+                },
+                {
+                    binding: 1,
+                    resource: { buffer: this.land.landTextureStorageBuffer }
                 }
             ]
         });
@@ -64,14 +73,14 @@ export class allRenderer extends renderer.Renderer {
             vertex: {
                 module: renderer.device.createShaderModule({
                     label: "vert shader",
-                    code: shaders.triangleVertWGSL
+                    code: shaders.landVertWGSL
                 }),
                 entryPoint: 'main',
             },
             fragment: {
                 module: renderer.device.createShaderModule({
                     label: "frag shader",
-                    code: shaders.fragWGSL,
+                    code: shaders.landFragWGSL,
                 }),
                 entryPoint: 'main',
                 targets: [
@@ -113,7 +122,7 @@ export class allRenderer extends renderer.Renderer {
         renderPass.setPipeline(this.pipeline); // we have only one render pipelin but there may be more pipelines u wanna put in
         renderPass.setBindGroup(shaders.constants.bindGroup_uniforms, this.sceneUniformsBindGroup); // set ur own bind groups
 
-        renderPass.draw(3, 1, 0, 0); // num vertices of the triangle, other data. Will change depending on the data u pass in
+        renderPass.draw(480, 1, 0, 0); // num vertices of the triangle, other data. Will change depending on the data u pass in
 
         this.lightningDrawing.render(renderPass);
 

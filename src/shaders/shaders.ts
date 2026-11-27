@@ -4,6 +4,8 @@ import volumetricVertRaw from './volumetric.vert.wgsl';
 import volumetricFragRaw from './volumetric.frag.wgsl';
 import cloudComputeRaw from './cloud_computation.cs.wgsl';
 import landComputeRaw from './land_computation.cs.wgsl';
+import landVertRaw from './land.vert.wgsl';
+import landFragRaw from './land.frag.wgsl';
 
 
 export const constants = {
@@ -31,3 +33,5 @@ export const volumetricVertWGSL: string = evalShaderRaw(volumetricVertRaw);
 export const volumetricFragWGSL: string = evalShaderRaw(volumetricFragRaw);
 export const cloudComputeSrc: string = evalShaderRaw(cloudComputeRaw);
 export const landComputeSrc: string = evalShaderRaw(landComputeRaw);
+export const landVertWGSL: string = evalShaderRaw(landVertRaw);
+export const landFragWGSL: string = evalShaderRaw(landFragRaw);
