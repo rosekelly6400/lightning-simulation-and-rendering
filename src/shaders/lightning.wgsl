@@ -145,7 +145,7 @@ fn channelDirectionWeight(channel: LightningChannel) -> f32 {
     if (channel.order == 0u) {
         return params.directionWeight;
     }
-    // Keep the existing slider useful while giving branch attractors more influence.
+    
     return params.directionWeight * (11.0 / 12.0);
 }
 
@@ -215,7 +215,6 @@ fn growOneStep(channelIndex: u32) {
         }
     }
 
-    // idk chat said to do this cause my stuff went jank
     if (length(growthDir) < 0.00001) {
         let toEnd = endPoint - tipPos;
         if (length(toEnd) < 0.00001) {
@@ -319,7 +318,7 @@ fn prepareSecondary() {
     for (var localIndex = 1u; localIndex + 1u < channels[0].nodeCount; localIndex++) {
         if (branchRandom(localIndex * 37u) < params.secondaryProbability) {
             candidateCount++;
-            // Reservoir sampling gives late roots the same chance as early roots.
+
             if (candidateCount <= SECONDARY_CHANNELS) {
                 roots[candidateCount - 1u] = localIndex;
             } else {
@@ -413,7 +412,7 @@ fn summarize() {
         }
     }
     let primary = channels[0];
-    // Export only the valid main-channel positions, in growth order.
+
     for (var index = 0u; index < primary.nodeCount; index++) {
         boltPoints.points[index] = nodes[primary.nodeStart + index].position;
     }

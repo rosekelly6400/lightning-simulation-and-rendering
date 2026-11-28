@@ -136,15 +136,15 @@ export class LightningDrawing {
             layout: drawPipelineLayout,
             vertex: {
                 module: vertexModule,
-                entryPoint: 'boltVertex',
+                entryPoint: 'main',
             },
             fragment: {
                 module: fragmentModule,
-                entryPoint: 'fragmentMain',
+                entryPoint: 'main',
                 targets: [{ format: renderer.canvasFormat }],
             },
             primitive: {
-                topology: 'line-list',
+                topology: 'triangle-list',
             },
         });
     }
@@ -319,7 +319,7 @@ export class LightningDrawing {
                 this.boltBindGroups.set(bolt, bindGroup);
             }
             renderPass.setBindGroup(1, bindGroup);
-            renderPass.draw(bolt.nodeCapacity * 2);
+            renderPass.draw(bolt.nodeCapacity * 6);
         }
     }
 }
