@@ -198,10 +198,11 @@ fn main(@builtin(global_invocation_id) globalIdx: vec3u) {
 
     var worley = WorleyNoise3D(position.xyz /1.0, 0.1);
     var perlin = PerlinNoise(position.xyz /60.0);
-    var fbm_freq = 0.02;
-    var fbmVal = fbm3D(position.x*fbm_freq, position.y*fbm_freq, position.z*fbm_freq);
+    var fbm_freq = 0.055;
+    var fbmVal = fbm3D(position.x*fbm_freq+200.0, position.y*fbm_freq, position.z*fbm_freq);
 
     var arrayVal = (1.0 - worley)*perlin + 0.8*perlin + 1.5*fbmVal;
+    var cloudVal = ((1.0 - worley)+ fbmVal)*0.5;
     cloudTextureSet.cloudTexture[cloudTexElementIdx] = fbmVal;
 
     

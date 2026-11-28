@@ -1,5 +1,6 @@
 import { Camera } from './stage/camera';
 import { Cloud_Precomputation } from './stage/cloud_precomputation';
+import { LightGrid_Precomputation } from './stage/lightGrid_precomputation';
 import { Stage } from './stage/stage';
 import { assert } from './utils/util';
 import { Pane } from 'tweakpane';
@@ -37,7 +38,29 @@ export async function initWebGPU() {
         throw new Error("No WebGPU adapter");
     }
 
-    device = await adapter.requestDevice();
+    device = await adapter.requestDevice(
+
+             {
+        requiredLimits: { 
+        maxComputeWorkgroupStorageSize: adapter.limits.maxComputeWorkgroupStorageSize,
+            maxStorageBufferBindingSize: adapter.limits. maxStorageBufferBindingSize,
+            maxBufferSize: adapter.limits.maxBufferSize,
+            maxStorageBuffersPerShaderStage: adapter.limits.maxStorageBuffersPerShaderStage,
+            maxComputeInvocationsPerWorkgroup: adapter.limits.maxComputeInvocationsPerWorkgroup
+        },
+    }
+    );
+
+     // change to false if we don't want to print out these numbers
+    if (true) {
+        const L = device.limits;
+        console.log("storage binding size:", L.maxStorageBufferBindingSize / 2**20, "MiB");
+        console.log("max buffer size:", L.maxBufferSize / 2**20, "MiB");
+        console.log("storage buffers per stage:", L.maxStorageBuffersPerShaderStage);          // a count
+        console.log("workgroup storage:", L.maxComputeWorkgroupStorageSize / 1024, "KiB");      // bytes
+        console.log("max invocations per workgroup:", L.maxComputeInvocationsPerWorkgroup);
+        console.log("max workgroup size xyz:", L.maxComputeWorkgroupSizeX, L.maxComputeWorkgroupSizeY, L.maxComputeWorkgroupSizeZ);
+    } 
 
     canvas = document.querySelector<HTMLCanvasElement>('#webgpu-canvas');
     assert(canvas !== null);
@@ -67,6 +90,7 @@ export async function initWebGPU() {
 export abstract class Renderer {
     protected camera: Camera;
     protected cloud_precomputation: Cloud_Precomputation;
+    protected lightGrid_precomputation: LightGrid_Precomputation;
     protected pane?: Pane;
 
     private prevTime: number = 0;
@@ -76,8 +100,10 @@ export abstract class Renderer {
     constructor(stage: Stage) {
         this.camera = stage.camera;
         this.cloud_precomputation = stage.cloud_precomputation;
+        this.lightGrid_precomputation = stage.lightGrid_precomputation;
 
         this.frameRequestId = requestAnimationFrame((t) => this.onFrame(t));
+        this.cloud_precomputation.onFrame(0.0);
     }
 
     stop(): void {
@@ -96,7 +122,8 @@ export abstract class Renderer {
         // added this for sound me thinks rebecca? 
         this.dt = deltaTime;
         this.camera.onFrame(deltaTime);
-        this.cloud_precomputation.onFrame(deltaTime);
+        this.lightGrid_precomputation.onFrame(time);
+        
 
         this.draw();
 
@@ -104,3 +131,7 @@ export abstract class Renderer {
         this.frameRequestId = requestAnimationFrame((t) => this.onFrame(t));
     }
 }
+
+
+
+   

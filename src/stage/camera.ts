@@ -162,12 +162,12 @@ export class Camera {
         const viewMat = mat4.lookAt(this.cameraPos, lookPos, [0, 1, 0]);
         const viewProjMat = mat4.mul(this.projMat, viewMat);
 
-        const yscaled = Math.tan(fovYDegrees * (Math.PI / 180));
+        const yscaled = Math.tan(toRadians(fovYDegrees));
         const xscaled = (yscaled * canvas.width) / canvas.height;
-        const fovx = (Math.atan(xscaled) * 180) / Math.PI;
+        const fovx = (Math.atan(xscaled) * 180.0) / Math.PI;
         let fov = vec2.create(fovx, fovYDegrees);
-        const pixelLength = vec2.create(2 * xscaled / canvas.width,
-            2 * yscaled / canvas.height);
+        const pixelLength = vec2.create(2.0 * xscaled / canvas.width,
+            2.0 * yscaled / canvas.height);
 
         this.uniforms.viewProjMat = viewProjMat;
         this.uniforms.viewMat = viewMat;
